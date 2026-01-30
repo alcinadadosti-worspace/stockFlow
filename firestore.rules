@@ -1,0 +1,81 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper: check if user is authenticated
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    // Helper: get user document
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    // Helper: check if user is admin
+    function isAdmin() {
+      return isAuth() && getUserData().role == 'ADMIN';
+    }
+
+    // Helper: check if user is the document owner
+    function isOwner(uid) {
+      return isAuth() && request.auth.uid == uid;
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow read: if isAuth();
+      allow create: if isAuth() && request.auth.uid == userId;
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Task types - readable by all auth, writable by admin
+    match /taskTypes/{taskTypeId} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
+
+    // Task logs
+    match /taskLogs/{logId} {
+      allow read: if isAuth() && (isOwner(resource.data.uid) || isAdmin());
+      allow create: if isAuth() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // Picking rules
+    match /pickingRules/{docId} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
+
+    // Lots
+    match /lots/{lotId} {
+      allow read: if isAuth();
+      allow create: if isAuth();
+      allow update: if isAuth() && (isOwner(resource.data.createdByUid) || isAdmin());
+      allow delete: if isAdmin();
+
+      // Orders subcollection
+      match /orders/{orderId} {
+        allow read: if isAuth();
+        allow create: if isAuth();
+        allow update: if isAuth();
+        allow delete: if isAdmin();
+      }
+    }
+
+    // Sealed codes (global uniqueness)
+    match /sealedCodes/{sealedCode} {
+      allow read: if isAuth();
+      allow create: if isAuth();
+      allow delete: if isAdmin();
+    }
+
+    // Leaderboard data (read by all, write by system)
+    match /leaderboard/{docId} {
+      allow read: if isAuth();
+      allow write: if isAuth();
+    }
+  }
+}

@@ -1,0 +1,183 @@
+import {
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  collection,
+  getDocs,
+  query,
+  orderBy,
+  where,
+  Timestamp,
+  runTransaction,
+  writeBatch,
+} from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import type { Lot, LotOrder, LotStatus, ParsedOrder } from '@/types';
+import { incrementUserXp, updateUserStreak } from './users';
+import { getPickingRules } from './pickingRules';
+import { calculateLotXp } from '@/lib/xp';
+
+export async function createLot(
+  lotCode: string,
+  orders: ParsedOrder[],
+  createdByUid: string,
+  createdByName: string,
+): Promise<string> {
+  const lotId = lotCode;
+  const now = Timestamp.now();
+
+  const totalItems = orders.reduce((sum, o) => sum + o.items, 0);
+  const cycle = orders[0]?.cycle || '';
+
+  await setDoc(doc(db, 'lots', lotId), {
+    lotCode,
+    createdByUid,
+    createdByName,
+    status: 'DRAFT' as LotStatus,
+    cycle,
+    startAt: null,
+    endAt: null,
+    createdAt: now,
+    totals: { orders: orders.length, items: totalItems },
+    xpEarned: 0,
+    durationMs: 0,
+  });
+
+  const batch = writeBatch(db);
+  for (const order of orders) {
+    const orderRef = doc(db, 'lots', lotId, 'orders', order.orderCode);
+    batch.set(orderRef, {
+      orderCode: order.orderCode,
+      cycle: order.cycle,
+      approvedAt: order.approvedAt ? Timestamp.fromDate(order.approvedAt) : null,
+      items: order.items,
+      status: 'PENDING',
+      sealedCode: null,
+      sealedAt: null,
+      createdAt: now,
+    });
+  }
+  await batch.commit();
+
+  return lotId;
+}
+
+export async function getLot(lotId: string): Promise<Lot | null> {
+  const snap = await getDoc(doc(db, 'lots', lotId));
+  if (!snap.exists()) return null;
+  return { id: snap.id, ...snap.data() } as Lot;
+}
+
+export async function getAllLots(): Promise<Lot[]> {
+  const q = query(collection(db, 'lots'), orderBy('createdAt', 'desc'));
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Lot);
+}
+
+export async function getLotsByUser(uid: string): Promise<Lot[]> {
+  const q = query(
+    collection(db, 'lots'),
+    where('createdByUid', '==', uid),
+    orderBy('createdAt', 'desc'),
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Lot);
+}
+
+export async function getLotOrders(lotId: string): Promise<LotOrder[]> {
+  const q = query(
+    collection(db, 'lots', lotId, 'orders'),
+    orderBy('orderCode'),
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as LotOrder);
+}
+
+export async function startLot(lotId: string): Promise<void> {
+  await updateDoc(doc(db, 'lots', lotId), {
+    status: 'IN_PROGRESS' as LotStatus,
+    startAt: Timestamp.now(),
+  });
+}
+
+export async function closeLot(lotId: string): Promise<void> {
+  await updateDoc(doc(db, 'lots', lotId), {
+    status: 'CLOSING' as LotStatus,
+    endAt: Timestamp.now(),
+  });
+}
+
+export async function sealOrder(
+  lotId: string,
+  orderId: string,
+  sealedCode: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await runTransaction(db, async (transaction) => {
+      // Check if seal code already exists globally
+      const sealRef = doc(db, 'sealedCodes', sealedCode);
+      const sealSnap = await transaction.get(sealRef);
+      if (sealSnap.exists()) {
+        throw new Error(`Lacre ${sealedCode} já foi utilizado no pedido ${sealSnap.data().orderCode}.`);
+      }
+
+      const orderRef = doc(db, 'lots', lotId, 'orders', orderId);
+      const orderSnap = await transaction.get(orderRef);
+      if (!orderSnap.exists()) {
+        throw new Error('Pedido não encontrado.');
+      }
+      if (orderSnap.data().status === 'SEALED') {
+        throw new Error('Pedido já foi encerrado.');
+      }
+
+      const now = Timestamp.now();
+
+      transaction.update(orderRef, {
+        status: 'SEALED',
+        sealedCode,
+        sealedAt: now,
+      });
+
+      transaction.set(sealRef, {
+        sealedCode,
+        orderCode: orderId,
+        lotId,
+        createdAt: now,
+      });
+    });
+
+    return { success: true };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Erro ao encerrar pedido.';
+    return { success: false, error: message };
+  }
+}
+
+export async function completeLot(lotId: string): Promise<void> {
+  const lotSnap = await getDoc(doc(db, 'lots', lotId));
+  if (!lotSnap.exists()) return;
+
+  const lot = lotSnap.data() as Omit<Lot, 'id'>;
+
+  const startMs = lot.startAt?.toMillis() || 0;
+  const endMs = lot.endAt?.toMillis() || Date.now();
+  const durationMs = endMs - startMs;
+
+  const rules = await getPickingRules();
+  const xpResult = calculateLotXp(lot.totals, durationMs, rules);
+
+  await updateDoc(doc(db, 'lots', lotId), {
+    status: 'DONE' as LotStatus,
+    xpEarned: xpResult.total,
+    durationMs,
+  });
+
+  await incrementUserXp(lot.createdByUid, xpResult.total);
+  await updateUserStreak(lot.createdByUid);
+}
+
+export async function checkAllOrdersSealed(lotId: string): Promise<boolean> {
+  const orders = await getLotOrders(lotId);
+  return orders.every((o) => o.status === 'SEALED');
+}
