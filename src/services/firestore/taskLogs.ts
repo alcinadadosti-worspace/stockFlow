@@ -7,7 +7,7 @@ import {
   orderBy,
   Timestamp,
 } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { getFirebaseDb } from '@/lib/firebase';
 import type { TaskLog } from '@/types';
 import { incrementUserXp, updateUserStreak } from './users';
 
@@ -23,7 +23,7 @@ export async function createTaskLog(data: {
   note: string;
 }): Promise<string> {
   const now = Timestamp.now();
-  const docRef = await addDoc(collection(db, COLLECTION), {
+  const docRef = await addDoc(collection(getFirebaseDb(), COLLECTION), {
     uid: data.uid,
     userName: data.userName,
     taskTypeId: data.taskTypeId,
@@ -43,7 +43,7 @@ export async function createTaskLog(data: {
 
 export async function getTaskLogsByUser(uid: string): Promise<TaskLog[]> {
   const q = query(
-    collection(db, COLLECTION),
+    collection(getFirebaseDb(), COLLECTION),
     where('uid', '==', uid),
     orderBy('occurredAt', 'desc'),
   );
@@ -53,7 +53,7 @@ export async function getTaskLogsByUser(uid: string): Promise<TaskLog[]> {
 
 export async function getAllTaskLogs(): Promise<TaskLog[]> {
   const q = query(
-    collection(db, COLLECTION),
+    collection(getFirebaseDb(), COLLECTION),
     orderBy('occurredAt', 'desc'),
   );
   const snap = await getDocs(q);
@@ -75,7 +75,7 @@ export async function getTaskLogsByPeriod(
     constraints.unshift(where('uid', '==', uid));
   }
 
-  const q = query(collection(db, COLLECTION), ...constraints);
+  const q = query(collection(getFirebaseDb(), COLLECTION), ...constraints);
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as TaskLog);
 }

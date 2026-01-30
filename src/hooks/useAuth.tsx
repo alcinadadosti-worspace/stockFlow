@@ -15,7 +15,7 @@ import {
   onAuthStateChanged,
   type User as FirebaseUser,
 } from 'firebase/auth';
-import { auth, hasFirebaseConfig } from '@/lib/firebase';
+import { getFirebaseAuth, hasFirebaseConfig } from '@/lib/firebase';
 import { createUser, getUser } from '@/services/firestore/users';
 import type { AppUser } from '@/types';
 
@@ -41,7 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+    const unsubscribe = onAuthStateChanged(getFirebaseAuth(), async (fbUser) => {
       setFirebaseUser(fbUser);
 
       if (fbUser) {
@@ -62,20 +62,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = useCallback(async (email: string, password: string) => {
-    const credential = await signInWithEmailAndPassword(auth, email, password);
+    const credential = await signInWithEmailAndPassword(getFirebaseAuth(), email, password);
     const appUser = await getUser(credential.user.uid);
     setUser(appUser);
   }, []);
 
   const signUp = useCallback(async (email: string, password: string, name: string) => {
-    const credential = await createUserWithEmailAndPassword(auth, email, password);
+    const credential = await createUserWithEmailAndPassword(getFirebaseAuth(), email, password);
     await createUser(credential.user.uid, { name, email });
     const appUser = await getUser(credential.user.uid);
     setUser(appUser);
   }, []);
 
   const signOut = useCallback(async () => {
-    await firebaseSignOut(auth);
+    await firebaseSignOut(getFirebaseAuth());
     setUser(null);
     setFirebaseUser(null);
   }, []);

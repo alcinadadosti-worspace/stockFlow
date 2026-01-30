@@ -9,13 +9,13 @@ import {
   orderBy,
   Timestamp,
 } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { getFirebaseDb } from '@/lib/firebase';
 import type { AppUser, UserRole } from '@/types';
 
 const COLLECTION = 'users';
 
 export async function createUser(uid: string, data: { name: string; email: string; role?: UserRole }): Promise<void> {
-  await setDoc(doc(db, COLLECTION, uid), {
+  await setDoc(doc(getFirebaseDb(), COLLECTION, uid), {
     name: data.name,
     email: data.email,
     role: data.role || 'ESTOQUISTA',
@@ -27,27 +27,27 @@ export async function createUser(uid: string, data: { name: string; email: strin
 }
 
 export async function getUser(uid: string): Promise<AppUser | null> {
-  const snap = await getDoc(doc(db, COLLECTION, uid));
+  const snap = await getDoc(doc(getFirebaseDb(), COLLECTION, uid));
   if (!snap.exists()) return null;
   return { uid: snap.id, ...snap.data() } as AppUser;
 }
 
 export async function updateUser(uid: string, data: Partial<AppUser>): Promise<void> {
-  await updateDoc(doc(db, COLLECTION, uid), data as Record<string, unknown>);
+  await updateDoc(doc(getFirebaseDb(), COLLECTION, uid), data as Record<string, unknown>);
 }
 
 export async function updateUserRole(uid: string, role: UserRole): Promise<void> {
-  await updateDoc(doc(db, COLLECTION, uid), { role });
+  await updateDoc(doc(getFirebaseDb(), COLLECTION, uid), { role });
 }
 
 export async function getAllUsers(): Promise<AppUser[]> {
-  const q = query(collection(db, COLLECTION), orderBy('name'));
+  const q = query(collection(getFirebaseDb(), COLLECTION), orderBy('name'));
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({ uid: d.id, ...d.data() }) as AppUser);
 }
 
 export async function incrementUserXp(uid: string, xp: number): Promise<void> {
-  const userRef = doc(db, COLLECTION, uid);
+  const userRef = doc(getFirebaseDb(), COLLECTION, uid);
   const snap = await getDoc(userRef);
   if (!snap.exists()) return;
   const current = snap.data().xpTotal || 0;
@@ -55,7 +55,7 @@ export async function incrementUserXp(uid: string, xp: number): Promise<void> {
 }
 
 export async function updateUserStreak(uid: string): Promise<void> {
-  const userRef = doc(db, COLLECTION, uid);
+  const userRef = doc(getFirebaseDb(), COLLECTION, uid);
   const snap = await getDoc(userRef);
   if (!snap.exists()) return;
 

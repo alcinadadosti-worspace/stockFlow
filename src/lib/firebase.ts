@@ -24,22 +24,12 @@ function getApp(): FirebaseApp {
   return _app;
 }
 
-export const auth: Auth = new Proxy({} as Auth, {
-  get(_target, prop, receiver) {
-    if (!hasFirebaseConfig) {
-      throw new Error('Firebase not configured. Set NEXT_PUBLIC_FIREBASE_API_KEY.');
-    }
-    if (!_auth) _auth = getAuth(getApp());
-    return Reflect.get(_auth, prop, receiver);
-  },
-});
+export function getFirebaseAuth(): Auth {
+  if (!_auth) _auth = getAuth(getApp());
+  return _auth;
+}
 
-export const db: Firestore = new Proxy({} as Firestore, {
-  get(_target, prop, receiver) {
-    if (!hasFirebaseConfig) {
-      throw new Error('Firebase not configured. Set NEXT_PUBLIC_FIREBASE_API_KEY.');
-    }
-    if (!_db) _db = getFirestore(getApp());
-    return Reflect.get(_db, prop, receiver);
-  },
-});
+export function getFirebaseDb(): Firestore {
+  if (!_db) _db = getFirestore(getApp());
+  return _db;
+}

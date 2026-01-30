@@ -12,7 +12,7 @@ import {
   runTransaction,
   writeBatch,
 } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { getFirebaseDb } from '@/lib/firebase';
 import type { Lot, LotOrder, LotStatus, ParsedOrder } from '@/types';
 import { incrementUserXp, updateUserStreak } from './users';
 import { getPickingRules } from './pickingRules';
@@ -30,7 +30,7 @@ export async function createLot(
   const totalItems = orders.reduce((sum, o) => sum + o.items, 0);
   const cycle = orders[0]?.cycle || '';
 
-  await setDoc(doc(db, 'lots', lotId), {
+  await setDoc(doc(getFirebaseDb(), 'lots', lotId), {
     lotCode,
     createdByUid,
     createdByName,
@@ -44,9 +44,9 @@ export async function createLot(
     durationMs: 0,
   });
 
-  const batch = writeBatch(db);
+  const batch = writeBatch(getFirebaseDb());
   for (const order of orders) {
-    const orderRef = doc(db, 'lots', lotId, 'orders', order.orderCode);
+    const orderRef = doc(getFirebaseDb(), 'lots', lotId, 'orders', order.orderCode);
     batch.set(orderRef, {
       orderCode: order.orderCode,
       cycle: order.cycle,
@@ -64,20 +64,20 @@ export async function createLot(
 }
 
 export async function getLot(lotId: string): Promise<Lot | null> {
-  const snap = await getDoc(doc(db, 'lots', lotId));
+  const snap = await getDoc(doc(getFirebaseDb(), 'lots', lotId));
   if (!snap.exists()) return null;
   return { id: snap.id, ...snap.data() } as Lot;
 }
 
 export async function getAllLots(): Promise<Lot[]> {
-  const q = query(collection(db, 'lots'), orderBy('createdAt', 'desc'));
+  const q = query(collection(getFirebaseDb(), 'lots'), orderBy('createdAt', 'desc'));
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Lot);
 }
 
 export async function getLotsByUser(uid: string): Promise<Lot[]> {
   const q = query(
-    collection(db, 'lots'),
+    collection(getFirebaseDb(), 'lots'),
     where('createdByUid', '==', uid),
     orderBy('createdAt', 'desc'),
   );
@@ -87,7 +87,7 @@ export async function getLotsByUser(uid: string): Promise<Lot[]> {
 
 export async function getLotOrders(lotId: string): Promise<LotOrder[]> {
   const q = query(
-    collection(db, 'lots', lotId, 'orders'),
+    collection(getFirebaseDb(), 'lots', lotId, 'orders'),
     orderBy('orderCode'),
   );
   const snap = await getDocs(q);
@@ -95,14 +95,14 @@ export async function getLotOrders(lotId: string): Promise<LotOrder[]> {
 }
 
 export async function startLot(lotId: string): Promise<void> {
-  await updateDoc(doc(db, 'lots', lotId), {
+  await updateDoc(doc(getFirebaseDb(), 'lots', lotId), {
     status: 'IN_PROGRESS' as LotStatus,
     startAt: Timestamp.now(),
   });
 }
 
 export async function closeLot(lotId: string): Promise<void> {
-  await updateDoc(doc(db, 'lots', lotId), {
+  await updateDoc(doc(getFirebaseDb(), 'lots', lotId), {
     status: 'CLOSING' as LotStatus,
     endAt: Timestamp.now(),
   });
@@ -114,15 +114,15 @@ export async function sealOrder(
   sealedCode: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    await runTransaction(db, async (transaction) => {
+    await runTransaction(getFirebaseDb(), async (transaction) => {
       // Check if seal code already exists globally
-      const sealRef = doc(db, 'sealedCodes', sealedCode);
+      const sealRef = doc(getFirebaseDb(), 'sealedCodes', sealedCode);
       const sealSnap = await transaction.get(sealRef);
       if (sealSnap.exists()) {
         throw new Error(`Lacre ${sealedCode} já foi utilizado no pedido ${sealSnap.data().orderCode}.`);
       }
 
-      const orderRef = doc(db, 'lots', lotId, 'orders', orderId);
+      const orderRef = doc(getFirebaseDb(), 'lots', lotId, 'orders', orderId);
       const orderSnap = await transaction.get(orderRef);
       if (!orderSnap.exists()) {
         throw new Error('Pedido não encontrado.');
@@ -155,7 +155,7 @@ export async function sealOrder(
 }
 
 export async function completeLot(lotId: string): Promise<void> {
-  const lotSnap = await getDoc(doc(db, 'lots', lotId));
+  const lotSnap = await getDoc(doc(getFirebaseDb(), 'lots', lotId));
   if (!lotSnap.exists()) return;
 
   const lot = lotSnap.data() as Omit<Lot, 'id'>;
@@ -167,7 +167,7 @@ export async function completeLot(lotId: string): Promise<void> {
   const rules = await getPickingRules();
   const xpResult = calculateLotXp(lot.totals, durationMs, rules);
 
-  await updateDoc(doc(db, 'lots', lotId), {
+  await updateDoc(doc(getFirebaseDb(), 'lots', lotId), {
     status: 'DONE' as LotStatus,
     xpEarned: xpResult.total,
     durationMs,
