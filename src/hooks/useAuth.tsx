@@ -15,7 +15,7 @@ import {
   onAuthStateChanged,
   type User as FirebaseUser,
 } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { auth, hasFirebaseConfig } from '@/lib/firebase';
 import { createUser, getUser } from '@/services/firestore/users';
 import type { AppUser } from '@/types';
 
@@ -36,6 +36,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!hasFirebaseConfig) {
+      setLoading(false);
+      return;
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       setFirebaseUser(fbUser);
 
