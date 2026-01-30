@@ -2,7 +2,15 @@
   "permissions": {
     "allow": [
       "Bash(git init:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfeat: StockFlow - sistema completo de produtividade e gamificacao para estoquistas\n\n- Next.js 14 App Router + TypeScript + TailwindCSS + shadcn/ui\n- Firebase Auth \\(email/senha\\) + Firestore\n- Gamificacao: XP, levels, badges, streaks, leaderboard\n- Modulo Tarefas: catalogo configuravel, registro com XP\n- Modulo Lotes: import CSV/XLSX, fluxo picking completo\n  - Iniciar/Fechar lote com timestamps\n  - Encerrar pedidos com lacre \\(barcode 10 digitos\\)\n  - Validacao global de unicidade de lacre\n  - Calculo de XP com bonus por velocidade\n- Admin: CRUD tarefas, regras XP configuraveis, gestao usuarios, relatorios\n- Dashboard com metricas, graficos Recharts, progresso de level\n- Testes unitarios \\(Vitest\\) para XP, validacoes e parse de planilha\n- Firestore security rules com controle ADMIN/ESTOQUISTA\n- Seed script para dados iniciais\n- Dark mode, sidebar colapsavel, UI profissional\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git remote add origin https://github.com/alcinadadosti-worspace/stockFlow.git)",
+      "Bash(git branch -M main)",
+      "Bash(git push -u origin main)",
+      "Bash(npx next build)",
+      "Bash(cat:*)",
+      "Bash(findstr:*)",
+      "Bash(dir:*)"
     ]
   }
 }
