@@ -4,21 +4,24 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Trophy, Medal, Award, TrendingUp, Zap } from 'lucide-react';
+import { Trophy, Medal, Award, TrendingUp, Zap, ChevronDown, ChevronUp } from 'lucide-react';
 import { getAllUsers } from '@/services/firestore/users';
 import { getAllTaskLogs } from '@/services/firestore/taskLogs';
 import { getAllLots } from '@/services/firestore/lots';
 import { useAuth } from '@/hooks/useAuth';
 import { calculateLevel } from '@/lib/utils';
-import type { AppUser, TaskLog, Lot, LeaderboardEntry } from '@/types';
+import type { AppUser, TaskLog, Lot, AdminLeaderboardEntry } from '@/types';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
+import { AdminLeaderboardRow } from '@/components/leaderboard/admin-leaderboard-row';
 
 export default function LeaderboardPage() {
   const { user } = useAuth();
-  const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
+  const isAdmin = user?.role === 'ADMIN';
+  const [entries, setEntries] = useState<AdminLeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('current-month');
+  const [expandedUid, setExpandedUid] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -59,13 +62,36 @@ export default function LeaderboardPage() {
         return ts >= startMs && ts <= endMs && l.status === 'DONE';
       });
 
-      const leaderboard: LeaderboardEntry[] = users.map((u) => {
+      const leaderboard: AdminLeaderboardEntry[] = users.map((u) => {
         const userLogs = filteredLogs.filter((l) => l.uid === u.uid);
         const userLots = filteredLots.filter((l) => l.createdByUid === u.uid);
         const xpTasks = userLogs.reduce((sum, l) => sum + (l.xp || 0), 0);
         const xpPicking = userLots.reduce((sum, l) => sum + (l.xpEarned || 0), 0);
         const xpTotal = xpTasks + xpPicking;
         const ordersSealed = userLots.reduce((sum, l) => sum + (l.totals?.orders || 0), 0);
+        const itemsSeparated = userLots.reduce((sum, l) => sum + (l.totals?.items || 0), 0);
+
+        // Admin metrics
+        const avgPickingMs = userLots.length > 0
+          ? userLots.reduce((s, l) => s + (l.durationMs || 0), 0) / userLots.length
+          : 0;
+        const avgScanningMs = userLots.length > 0
+          ? userLots.reduce((s, l) => s + (l.scanDurationMs || 0), 0) / userLots.length
+          : 0;
+        const avgTotalMs = userLots.length > 0
+          ? userLots.reduce((s, l) => s + (l.totalDurationMs || 0), 0) / userLots.length
+          : 0;
+
+        const totalDurMinutes = userLots.reduce((s, l) => s + (l.durationMs || 0), 0) / 60000;
+        const totalDurHours = totalDurMinutes / 60;
+        const itemsPerMinute = totalDurMinutes > 0 ? itemsSeparated / totalDurMinutes : 0;
+        const ordersPerHour = totalDurHours > 0 ? ordersSealed / totalDurHours : 0;
+
+        const taskBreakdown: Record<string, number> = {};
+        userLogs.forEach((l) => {
+          const name = l.taskTypeName || 'Sem nome';
+          taskBreakdown[name] = (taskBreakdown[name] || 0) + 1;
+        });
 
         return {
           uid: u.uid,
@@ -77,6 +103,13 @@ export default function LeaderboardPage() {
           ordersSealed,
           tasksCompleted: userLogs.length,
           level: calculateLevel(u.xpTotal || 0),
+          itemsSeparated,
+          avgPickingMs,
+          avgScanningMs,
+          avgTotalMs,
+          itemsPerMinute: Math.round(itemsPerMinute * 100) / 100,
+          ordersPerHour: Math.round(ordersPerHour * 100) / 100,
+          taskBreakdown,
         };
       });
 
@@ -158,6 +191,16 @@ export default function LeaderboardPage() {
                       {entry.tasksCompleted} tarefas
                     </Badge>
                   </div>
+                  {isAdmin && (
+                    <div className="mt-2 flex justify-center gap-2">
+                      <Badge variant="outline" className="text-xs">
+                        {entry.itemsSeparated} itens
+                      </Badge>
+                      <Badge variant="outline" className="text-xs">
+                        {entry.ordersSealed} pedidos
+                      </Badge>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             );
@@ -187,39 +230,59 @@ export default function LeaderboardPage() {
           ) : (
             <div className="space-y-2">
               {entries.map((entry, index) => (
-                <div
-                  key={entry.uid}
-                  className={cn(
-                    'flex items-center gap-4 rounded-lg border p-3 transition-colors',
-                    entry.uid === user?.uid && 'border-primary/50 bg-primary/5',
-                  )}
-                >
-                  <div className="flex h-8 w-8 items-center justify-center">
-                    {getRankIcon(index)}
-                  </div>
-                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-sm font-bold">
-                    {entry.name.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{entry.name}</span>
-                      {entry.uid === user?.uid && (
-                        <Badge variant="outline" className="text-xs">Você</Badge>
+                <div key={entry.uid}>
+                  <div
+                    className={cn(
+                      'flex items-center gap-4 rounded-lg border p-3 transition-colors',
+                      entry.uid === user?.uid && 'border-primary/50 bg-primary/5',
+                      isAdmin && 'cursor-pointer hover:bg-accent/50',
+                    )}
+                    onClick={() => {
+                      if (isAdmin) {
+                        setExpandedUid(expandedUid === entry.uid ? null : entry.uid);
+                      }
+                    }}
+                  >
+                    <div className="flex h-8 w-8 items-center justify-center">
+                      {getRankIcon(index)}
+                    </div>
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-sm font-bold">
+                      {entry.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{entry.name}</span>
+                        {entry.uid === user?.uid && (
+                          <Badge variant="outline" className="text-xs">Você</Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Nível {entry.level} &middot; {entry.lotsCompleted} lotes &middot; {entry.tasksCompleted} tarefas
+                        {isAdmin && ` · ${entry.ordersSealed} pedidos · ${entry.itemsSeparated} itens`}
+                      </p>
+                    </div>
+                    <div className="text-right flex items-center gap-2">
+                      <div>
+                        <p className="font-bold text-amber-500">
+                          <Zap className="mr-1 inline h-3 w-3" />
+                          {entry.xpTotal.toLocaleString('pt-BR')} XP
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Tarefas: {entry.xpTasks} | Picking: {entry.xpPicking}
+                        </p>
+                      </div>
+                      {isAdmin && (
+                        expandedUid === entry.uid
+                          ? <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                          : <ChevronDown className="h-4 w-4 text-muted-foreground" />
                       )}
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      Nível {entry.level} &middot; {entry.lotsCompleted} lotes &middot; {entry.tasksCompleted} tarefas
-                    </p>
                   </div>
-                  <div className="text-right">
-                    <p className="font-bold text-amber-500">
-                      <Zap className="mr-1 inline h-3 w-3" />
-                      {entry.xpTotal.toLocaleString('pt-BR')} XP
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Tarefas: {entry.xpTasks} | Picking: {entry.xpPicking}
-                    </p>
-                  </div>
+
+                  {/* Expanded Admin Detail */}
+                  {isAdmin && expandedUid === entry.uid && (
+                    <AdminLeaderboardRow entry={entry} />
+                  )}
                 </div>
               ))}
             </div>

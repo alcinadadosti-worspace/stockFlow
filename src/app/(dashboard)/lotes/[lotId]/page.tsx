@@ -286,6 +286,7 @@ export default function LotDetailPage() {
 
   const nextPendingOrder = orders.find((o) => o.status === 'PENDING');
   const isScanningStarted = !!lot.scanStartAt;
+  const isAdmin = user?.role === 'ADMIN';
 
   return (
     <div className="space-y-6">
@@ -395,8 +396,8 @@ export default function LotDetailPage() {
         </Card>
       )}
 
-      {/* Actions */}
-      {lot.status === 'DRAFT' && (
+      {/* Actions (hidden for admin - read only) */}
+      {!isAdmin && lot.status === 'DRAFT' && (
         <Card>
           <CardContent className="flex items-center justify-between pt-6">
             <div>
@@ -413,7 +414,7 @@ export default function LotDetailPage() {
         </Card>
       )}
 
-      {lot.status === 'IN_PROGRESS' && (
+      {!isAdmin && lot.status === 'IN_PROGRESS' && (
         <Card>
           <CardContent className="flex items-center justify-between pt-6">
             <div>
@@ -436,7 +437,7 @@ export default function LotDetailPage() {
       )}
 
       {/* Bipar Pedido Agora? Button */}
-      {lot.status === 'CLOSING' && !isScanningStarted && (
+      {!isAdmin && lot.status === 'CLOSING' && !isScanningStarted && (
         <Card className="border-amber-500/30 bg-amber-500/5">
           <CardContent className="flex flex-col items-center justify-center pt-6 pb-6 gap-4">
             <ScanLine className="h-12 w-12 text-amber-500" />
@@ -460,7 +461,7 @@ export default function LotDetailPage() {
       )}
 
       {/* Seal Orders */}
-      {lot.status === 'CLOSING' && isScanningStarted && (
+      {!isAdmin && lot.status === 'CLOSING' && isScanningStarted && (
         <Card className="border-amber-500/30">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

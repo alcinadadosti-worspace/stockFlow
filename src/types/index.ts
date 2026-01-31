@@ -102,6 +102,16 @@ export interface LeaderboardEntry {
   level: number;
 }
 
+export interface AdminLeaderboardEntry extends LeaderboardEntry {
+  itemsSeparated: number;
+  avgPickingMs: number;
+  avgScanningMs: number;
+  avgTotalMs: number;
+  itemsPerMinute: number;
+  ordersPerHour: number;
+  taskBreakdown: Record<string, number>;
+}
+
 export interface DailyXp {
   date: string;
   xp: number;

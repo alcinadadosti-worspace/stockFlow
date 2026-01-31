@@ -8,6 +8,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { getTaskLogsByUser, getLotsByUser, getUser } from '@/services/firestore';
 import { calculateLevel, xpProgress, formatDateBR } from '@/lib/utils';
 import { BADGES } from '@/lib/constants';
+import { AdminDashboard } from '@/components/dashboard/admin-dashboard';
 import type { AppUser, TaskLog, Lot, DailyXp, UserStats } from '@/types';
 import {
   Zap,
@@ -163,6 +164,16 @@ function LoadingSkeleton() {
 }
 
 export default function DashboardPage() {
+  const { user } = useAuth();
+
+  if (user?.role === 'ADMIN') {
+    return <AdminDashboard />;
+  }
+
+  return <EstoquistaDashboard />;
+}
+
+function EstoquistaDashboard() {
   const { user } = useAuth();
   const [appUser, setAppUser] = useState<AppUser | null>(null);
   const [taskLogs, setTaskLogs] = useState<TaskLog[]>([]);

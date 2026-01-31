@@ -70,10 +70,12 @@ export default function LotesPage() {
             Gerencie os lotes de separação de pedidos
           </p>
         </div>
-        <Button onClick={() => setShowImport(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Importar Lote
-        </Button>
+        {!isAdmin && (
+          <Button onClick={() => setShowImport(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Importar Lote
+          </Button>
+        )}
       </div>
 
       {/* Stats */}
@@ -129,13 +131,15 @@ export default function LotesPage() {
             <div className="py-12 text-center">
               <Package className="mx-auto mb-4 h-12 w-12 text-muted-foreground/50" />
               <p className="text-muted-foreground">Nenhum lote encontrado</p>
-              <Button
-                variant="outline"
-                className="mt-4"
-                onClick={() => setShowImport(true)}
-              >
-                Importar Primeiro Lote
-              </Button>
+              {!isAdmin && (
+                <Button
+                  variant="outline"
+                  className="mt-4"
+                  onClick={() => setShowImport(true)}
+                >
+                  Importar Primeiro Lote
+                </Button>
+              )}
             </div>
           ) : (
             <div className="space-y-2">
@@ -159,6 +163,7 @@ export default function LotesPage() {
                     <p className="text-sm text-muted-foreground">
                       {lot.totals?.orders || 0} pedidos &middot; {lot.totals?.items || 0} itens
                       {lot.cycle && ` &middot; Ciclo ${lot.cycle}`}
+                      {isAdmin && lot.createdByName && ` · por ${lot.createdByName}`}
                     </p>
                   </div>
                   <div className="text-right text-sm">

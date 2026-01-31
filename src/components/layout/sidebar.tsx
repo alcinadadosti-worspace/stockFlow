@@ -9,7 +9,6 @@ import {
   Trophy,
   ClipboardList,
   Package,
-  Settings,
   Users,
   Sliders,
   BarChart3,
@@ -30,7 +29,6 @@ const mainNav = [
 ];
 
 const adminNav = [
-  { href: '/admin/tarefas', label: 'Gerenciar Tarefas', icon: Settings },
   { href: '/admin/regras-xp', label: 'Regras de XP', icon: Sliders },
   { href: '/admin/usuarios', label: 'Usuários', icon: Users },
   { href: '/admin/relatorios', label: 'Relatórios', icon: BarChart3 },
