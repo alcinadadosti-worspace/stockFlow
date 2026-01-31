@@ -61,10 +61,14 @@ export interface Lot {
   cycle: string;
   startAt?: Timestamp | null;
   endAt?: Timestamp | null;
+  scanStartAt?: Timestamp | null;
+  scanEndAt?: Timestamp | null;
   createdAt: Timestamp;
   totals: LotTotals;
   xpEarned?: number;
   durationMs?: number;
+  scanDurationMs?: number;
+  totalDurationMs?: number;
 }
 
 export interface LotOrder {

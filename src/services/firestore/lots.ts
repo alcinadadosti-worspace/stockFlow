@@ -108,6 +108,12 @@ export async function closeLot(lotId: string): Promise<void> {
   });
 }
 
+export async function startScanning(lotId: string): Promise<void> {
+  await updateDoc(doc(getFirebaseDb(), 'lots', lotId), {
+    scanStartAt: Timestamp.now(),
+  });
+}
+
 export async function sealOrder(
   lotId: string,
   orderId: string,
@@ -159,10 +165,17 @@ export async function completeLot(lotId: string): Promise<void> {
   if (!lotSnap.exists()) return;
 
   const lot = lotSnap.data() as Omit<Lot, 'id'>;
+  const now = Timestamp.now();
 
   const startMs = lot.startAt?.toMillis() || 0;
   const endMs = lot.endAt?.toMillis() || Date.now();
   const durationMs = endMs - startMs;
+
+  const scanStartMs = lot.scanStartAt?.toMillis() || endMs;
+  const scanEndMs = now.toMillis();
+  const scanDurationMs = scanEndMs - scanStartMs;
+
+  const totalDurationMs = scanEndMs - endMs;
 
   const rules = await getPickingRules();
   const xpResult = calculateLotXp(lot.totals, durationMs, rules);
@@ -171,6 +184,9 @@ export async function completeLot(lotId: string): Promise<void> {
     status: 'DONE' as LotStatus,
     xpEarned: xpResult.total,
     durationMs,
+    scanEndAt: now,
+    scanDurationMs,
+    totalDurationMs,
   });
 
   await incrementUserXp(lot.createdByUid, xpResult.total);
