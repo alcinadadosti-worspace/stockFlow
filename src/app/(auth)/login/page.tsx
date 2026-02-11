@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { loginSchema, registerSchema, type LoginForm, type RegisterForm } from '@/lib/schemas';
@@ -117,6 +118,14 @@ export default function LoginPage() {
                       {loginForm.formState.errors.password.message}
                     </p>
                   )}
+                  <div className="text-right">
+                    <Link
+                      href="/forgot-password"
+                      className="text-xs text-muted-foreground underline hover:text-foreground"
+                    >
+                      Esqueci minha senha
+                    </Link>
+                  </div>
                 </div>
                 <Button type="submit" className="w-full" disabled={loading}>
                   {loading ? 'Entrando...' : 'Entrar'}
