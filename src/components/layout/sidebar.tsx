@@ -16,6 +16,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Boxes,
+  Monitor,
 } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -32,6 +33,7 @@ const adminNav = [
   { href: '/admin/regras-xp', label: 'Regras de XP', icon: Sliders },
   { href: '/admin/usuarios', label: 'Usuários', icon: Users },
   { href: '/admin/relatorios', label: 'Relatórios', icon: BarChart3 },
+  { href: '/telao', label: 'Telão', icon: Monitor, external: true },
 ];
 
 export function Sidebar() {
@@ -91,10 +93,12 @@ export function Sidebar() {
             <div className="space-y-1">
               {adminNav.map((item) => {
                 const isActive = pathname === item.href;
+                const isExternal = 'external' in item && item.external;
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
+                    target={isExternal ? '_blank' : undefined}
                     className={cn(
                       'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
                       isActive
