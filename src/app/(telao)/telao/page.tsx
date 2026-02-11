@@ -36,6 +36,9 @@ interface TopUser {
   name: string;
   xp: number;
   level: number;
+  lots: number;
+  orders: number;
+  items: number;
 }
 
 export default function TelaoPage() {
@@ -112,12 +115,17 @@ export default function TelaoPage() {
       const xpTasks = userTaskLogs.reduce((sum, l) => sum + l.xp, 0);
       const xpPicking = userLots.reduce((sum, l) => sum + (l.xpEarned || 0), 0);
       const totalXp = xpTasks + xpPicking;
+      const totalOrders = userLots.reduce((sum, l) => sum + (l.totals?.orders || 0), 0);
+      const totalItems = userLots.reduce((sum, l) => sum + (l.totals?.items || 0), 0);
 
       return {
         uid: u.uid,
         name: u.name,
         xp: totalXp,
         level: calculateLevel(u.xpTotal || 0),
+        lots: userLots.length,
+        orders: totalOrders,
+        items: totalItems,
       };
     })
     .filter((u) => u.xp > 0)
@@ -226,6 +234,9 @@ export default function TelaoPage() {
                   name={user.name}
                   xp={user.xp}
                   level={user.level}
+                  lots={user.lots}
+                  orders={user.orders}
+                  items={user.items}
                 />
               ))}
             </div>
@@ -274,9 +285,12 @@ interface RankingItemProps {
   name: string;
   xp: number;
   level: number;
+  lots: number;
+  orders: number;
+  items: number;
 }
 
-function RankingItem({ position, name, xp, level }: RankingItemProps) {
+function RankingItem({ position, name, xp, level, lots, orders, items }: RankingItemProps) {
   const positionStyles: Record<number, { bg: string; text: string; icon?: React.ElementType }> = {
     1: { bg: 'bg-yellow-500/20', text: 'text-yellow-400', icon: Crown },
     2: { bg: 'bg-slate-400/20', text: 'text-slate-300' },
@@ -294,12 +308,18 @@ function RankingItem({ position, name, xp, level }: RankingItemProps) {
         {Icon ? <Icon className="h-7 w-7" /> : position}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-xl font-semibold text-white truncate">{name}</p>
-        <p className="text-sm text-slate-400">Nivel {level}</p>
+        <p className="text-lg font-semibold text-white truncate">{name}</p>
+        <div className="flex items-center gap-3 text-xs text-slate-400 mt-1">
+          <span>{lots} lotes</span>
+          <span className="text-slate-600">|</span>
+          <span>{orders} pedidos</span>
+          <span className="text-slate-600">|</span>
+          <span>{items} itens</span>
+        </div>
       </div>
       <div className="text-right">
         <p className={`text-2xl font-bold ${style.text}`}>{xp.toLocaleString('pt-BR')}</p>
-        <p className="text-sm text-slate-400">XP</p>
+        <p className="text-xs text-slate-400">XP</p>
       </div>
     </div>
   );
