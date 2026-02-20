@@ -157,3 +157,29 @@ export interface SpreadsheetValidationResult {
   orders: ParsedOrder[];
   errors: string[];
 }
+
+// Pedido Avulso (pedido unico sem lote)
+export type SingleOrderStatus = 'DRAFT' | 'SEPARATING' | 'READY_TO_SCAN' | 'SCANNING' | 'DONE';
+
+export interface SingleOrder {
+  id: string;
+  orderCode: string;
+  items: number;
+  createdByUid: string;
+  createdByName?: string;
+  status: SingleOrderStatus;
+  // Timestamps
+  createdAt: Timestamp;
+  separationStartAt?: Timestamp | null;
+  separationEndAt?: Timestamp | null;
+  scanStartAt?: Timestamp | null;
+  scanEndAt?: Timestamp | null;
+  // Durações
+  separationDurationMs?: number;
+  scanDurationMs?: number;
+  totalDurationMs?: number;
+  // Lacre
+  sealedCode?: string;
+  // XP
+  xpEarned?: number;
+}

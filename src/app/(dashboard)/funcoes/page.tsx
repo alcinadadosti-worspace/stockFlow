@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Package, ScanLine, Layers } from 'lucide-react';
+import { Package, ScanLine, Layers, ClipboardList } from 'lucide-react';
 
 export default function FuncoesPage() {
   const { user } = useAuth();
@@ -24,7 +24,7 @@ export default function FuncoesPage() {
         </p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-3">
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         {/* Funcao Geral */}
         <Card className="cursor-pointer transition-all hover:border-primary hover:shadow-lg" onClick={() => router.push('/lotes')}>
           <CardHeader className="text-center">
@@ -83,6 +83,27 @@ export default function FuncoesPage() {
               Voce pega lotes ja separados e faz a bipagem dos pedidos e lacracao das caixas.
             </p>
             <Button className="w-full bg-amber-500 hover:bg-amber-600">
+              Acessar
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Pedido Avulso */}
+        <Card className="cursor-pointer transition-all hover:border-primary hover:shadow-lg" onClick={() => router.push('/pedido-avulso')}>
+          <CardHeader className="text-center">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-500/10">
+              <ClipboardList className="h-8 w-8 text-green-500" />
+            </div>
+            <CardTitle>Pedido Avulso</CardTitle>
+            <CardDescription>
+              Processar um pedido individual
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="text-center">
+            <p className="text-sm text-muted-foreground mb-4">
+              Processe um unico pedido com separacao, bipagem e lacracao completa.
+            </p>
+            <Button className="w-full bg-green-500 hover:bg-green-600">
               Acessar
             </Button>
           </CardContent>

@@ -118,9 +118,20 @@ export async function closeLot(lotId: string): Promise<void> {
 
 // Fecha o lote para o separador (modo SEPARADOR) - lote fica aguardando bipagem
 export async function closeLotForSeparator(lotId: string): Promise<void> {
+  // Buscar o lote para calcular durationMs
+  const lotSnap = await getDoc(doc(getFirebaseDb(), 'lots', lotId));
+  if (!lotSnap.exists()) return;
+
+  const lot = lotSnap.data();
+  const now = Timestamp.now();
+  const startMs = lot.startAt?.toMillis() || 0;
+  const endMs = now.toMillis();
+  const durationMs = endMs - startMs;
+
   await updateDoc(doc(getFirebaseDb(), 'lots', lotId), {
     status: 'READY_FOR_SCAN' as LotStatus,
-    endAt: Timestamp.now(),
+    endAt: now,
+    durationMs,
   });
 }
 
@@ -142,10 +153,15 @@ export async function getLotsReadyForScan(): Promise<Lot[]> {
   const q = query(
     collection(getFirebaseDb(), 'lots'),
     where('status', '==', 'READY_FOR_SCAN'),
-    orderBy('endAt', 'asc'),
   );
   const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Lot);
+  const lots = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Lot);
+  // Ordenar por endAt no cliente (mais antigo primeiro)
+  return lots.sort((a, b) => {
+    const aTime = a.endAt?.toMillis() || 0;
+    const bTime = b.endAt?.toMillis() || 0;
+    return aTime - bTime;
+  });
 }
 
 // Busca lotes em bipagem do bipador específico
@@ -153,10 +169,15 @@ export async function getLotsByScanner(uid: string): Promise<Lot[]> {
   const q = query(
     collection(getFirebaseDb(), 'lots'),
     where('scannerUid', '==', uid),
-    orderBy('createdAt', 'desc'),
   );
   const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Lot);
+  const lots = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Lot);
+  // Ordenar por createdAt no cliente (mais recente primeiro)
+  return lots.sort((a, b) => {
+    const aTime = a.createdAt?.toMillis() || 0;
+    const bTime = b.createdAt?.toMillis() || 0;
+    return bTime - aTime;
+  });
 }
 
 export async function startScanning(lotId: string): Promise<void> {
