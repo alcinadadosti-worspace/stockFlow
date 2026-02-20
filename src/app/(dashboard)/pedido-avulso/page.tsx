@@ -163,8 +163,9 @@ export default function PedidoAvulsoPage() {
       setShowCreate(false);
       resetDialog();
       router.push(`/pedido-avulso/${id}`);
-    } catch (err) {
-      toast.error('Erro ao criar pedido');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Erro ao criar pedido';
+      toast.error(message);
     } finally {
       setCreating(false);
     }
@@ -180,8 +181,9 @@ export default function PedidoAvulsoPage() {
       setShowCreate(false);
       resetDialog();
       router.push(`/pedido-avulso/${id}`);
-    } catch (err) {
-      toast.error('Erro ao criar pedido');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Erro ao criar pedido';
+      toast.error(message);
     } finally {
       setCreating(false);
     }
