@@ -226,7 +226,7 @@ export default function TelaoPage() {
               <p className="text-xl">Nenhuma atividade ainda</p>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-5 overflow-y-auto max-h-[calc(100vh-280px)]">
               {topUsers.map((user, index) => (
                 <RankingItem
                   key={user.uid}
@@ -291,38 +291,47 @@ interface RankingItemProps {
 }
 
 function RankingItem({ position, name, xp, level, lots, orders, items }: RankingItemProps) {
-  const positionStyles: Record<number, { bg: string; text: string; icon?: React.ElementType }> = {
-    1: { bg: 'bg-yellow-500/20', text: 'text-yellow-400', icon: Crown },
-    2: { bg: 'bg-slate-400/20', text: 'text-slate-300' },
-    3: { bg: 'bg-orange-600/20', text: 'text-orange-400' },
-    4: { bg: 'bg-slate-700/50', text: 'text-slate-400' },
-    5: { bg: 'bg-slate-700/50', text: 'text-slate-400' },
+  const positionStyles: Record<number, { bg: string; text: string; border: string; icon?: React.ElementType }> = {
+    1: { bg: 'bg-yellow-500/20', text: 'text-yellow-400', border: 'border-yellow-500/30', icon: Crown },
+    2: { bg: 'bg-slate-400/20', text: 'text-slate-300', border: 'border-slate-400/30' },
+    3: { bg: 'bg-orange-600/20', text: 'text-orange-400', border: 'border-orange-500/30' },
+    4: { bg: 'bg-slate-700/50', text: 'text-slate-400', border: 'border-slate-600/30' },
+    5: { bg: 'bg-slate-700/50', text: 'text-slate-400', border: 'border-slate-600/30' },
   };
 
   const style = positionStyles[position] || positionStyles[5];
   const Icon = style.icon;
 
   return (
-    <div className={`flex items-center gap-4 p-5 rounded-xl ${style.bg} transition-all`}>
-      <div className={`w-14 h-14 rounded-full flex items-center justify-center font-bold text-3xl ${style.text}`}>
-        {Icon ? <Icon className="h-8 w-8" /> : position}
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-xl font-semibold text-white truncate">{name}</p>
-        <div className="flex items-center gap-4 text-base text-slate-300 mt-2 font-medium">
-          <span className="flex items-center gap-1">
-            <Package className="h-4 w-4 text-blue-400" />
-            {lots} lotes
-          </span>
-          <span className="text-slate-600">|</span>
-          <span>{orders} pedidos</span>
-          <span className="text-slate-600">|</span>
-          <span>{items} itens</span>
+    <div className={`p-6 rounded-2xl ${style.bg} border ${style.border} transition-all`}>
+      {/* Header: Position + Name + XP */}
+      <div className="flex items-center gap-4 mb-4">
+        <div className={`w-16 h-16 rounded-full flex items-center justify-center font-bold text-4xl ${style.text} ${style.bg}`}>
+          {Icon ? <Icon className="h-10 w-10" /> : position}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-2xl font-bold text-white truncate">{name}</p>
+        </div>
+        <div className="text-right">
+          <p className={`text-4xl font-bold ${style.text}`}>{xp.toLocaleString('pt-BR')}</p>
+          <p className="text-lg text-slate-400">XP</p>
         </div>
       </div>
-      <div className="text-right">
-        <p className={`text-3xl font-bold ${style.text}`}>{xp.toLocaleString('pt-BR')}</p>
-        <p className="text-sm text-slate-400">XP</p>
+
+      {/* Stats: Lots, Orders, Items - BIG */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="bg-blue-500/10 rounded-xl p-3 text-center">
+          <p className="text-3xl font-bold text-blue-400">{lots}</p>
+          <p className="text-lg text-blue-300">lotes</p>
+        </div>
+        <div className="bg-violet-500/10 rounded-xl p-3 text-center">
+          <p className="text-3xl font-bold text-violet-400">{orders}</p>
+          <p className="text-lg text-violet-300">pedidos</p>
+        </div>
+        <div className="bg-emerald-500/10 rounded-xl p-3 text-center">
+          <p className="text-3xl font-bold text-emerald-400">{items}</p>
+          <p className="text-lg text-emerald-300">itens</p>
+        </div>
       </div>
     </div>
   );
