@@ -55,6 +55,9 @@ export interface LotTotals {
   items: number;
 }
 
+// Tipo de atribuicao do lote pelo admin
+export type LotAssignmentType = 'OPEN' | 'ASSIGNED_GENERAL' | 'ASSIGNED_SEPARATED';
+
 export interface Lot {
   id: string;
   lotCode: string;
@@ -81,6 +84,18 @@ export interface Lot {
   // XP dividido por função
   separatorXpEarned?: number;
   scannerXpEarned?: number;
+  // Campos para lotes criados pelo admin
+  isAdminCreated?: boolean;
+  assignmentType?: LotAssignmentType;
+  // Usuario atribuido para funcao geral (faz tudo)
+  assignedGeneralUid?: string;
+  assignedGeneralName?: string;
+  // Usuario atribuido para separar
+  assignedSeparatorUid?: string;
+  assignedSeparatorName?: string;
+  // Usuario atribuido para bipar
+  assignedScannerUid?: string;
+  assignedScannerName?: string;
 }
 
 export interface LotOrder {

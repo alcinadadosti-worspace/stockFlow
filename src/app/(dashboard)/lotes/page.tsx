@@ -3,13 +3,13 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
-import { getAllLots, getLotsByUser } from '@/services/firestore/lots';
+import { getAllLots, getLotsByUser, getAssignedLotsGeneral } from '@/services/firestore/lots';
 import type { Lot } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Package, Plus, Clock, CheckCircle2, Loader2, FileEdit, Hourglass } from 'lucide-react';
+import { Package, Plus, Clock, CheckCircle2, Loader2, FileEdit, Hourglass, Star } from 'lucide-react';
 import { formatDateTimeBR, formatDuration } from '@/lib/utils';
 import { LOT_STATUS_LABELS } from '@/lib/constants';
 import { cn } from '@/lib/utils';
@@ -50,8 +50,30 @@ export default function LotesPage() {
     if (!user) return;
     setLoading(true);
     try {
-      const data = isAdmin ? await getAllLots() : await getLotsByUser(user.uid);
-      setLots(data);
+      if (isAdmin) {
+        const data = await getAllLots();
+        setLots(data);
+      } else {
+        // Buscar lotes criados pelo usuario + lotes atribuidos a ele (funcao geral)
+        const [ownLots, assignedLots] = await Promise.all([
+          getLotsByUser(user.uid),
+          getAssignedLotsGeneral(user.uid),
+        ]);
+        // Combinar e remover duplicatas
+        const allLots = [...ownLots];
+        for (const lot of assignedLots) {
+          if (!allLots.find((l) => l.id === lot.id)) {
+            allLots.push(lot);
+          }
+        }
+        // Ordenar por createdAt desc
+        allLots.sort((a, b) => {
+          const aTime = a.createdAt?.toMillis() || 0;
+          const bTime = b.createdAt?.toMillis() || 0;
+          return bTime - aTime;
+        });
+        setLots(allLots);
+      }
     } catch (err) {
       console.error('Erro ao carregar lotes:', err);
     } finally {
@@ -161,6 +183,12 @@ export default function LotesPage() {
                         {getStatusIcon(lot.status)}
                         {LOT_STATUS_LABELS[lot.status]}
                       </Badge>
+                      {lot.isAdminCreated && lot.assignedGeneralUid === user?.uid && (
+                        <Badge variant="outline" className="text-violet-500 border-violet-500/30 gap-1">
+                          <Star className="h-3 w-3" />
+                          Atribuido
+                        </Badge>
+                      )}
                     </div>
                     <p className="text-sm text-muted-foreground">
                       {lot.totals?.orders || 0} pedidos &middot; {lot.totals?.items || 0} itens

@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
-import { getLotsReadyForScan, getLotsByScanner, claimLotForScanning } from '@/services/firestore/lots';
+import { getLotsReadyForScan, getLotsByScanner, claimLotForScanning, getAssignedLotsScanner } from '@/services/firestore/lots';
 import type { Lot } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -46,12 +46,40 @@ export default function BipadorPage() {
     if (!user) return;
     setLoading(true);
     try {
-      const [available, mine] = await Promise.all([
+      const [available, mine, assigned] = await Promise.all([
         getLotsReadyForScan(),
         getLotsByScanner(user.uid),
+        getAssignedLotsScanner(user.uid),
       ]);
-      setAvailableLots(available);
-      setMyLots(mine);
+
+      // Lotes disponiveis: READY_FOR_SCAN abertos + atribuidos a mim que ainda nao comecei
+      const assignedNotStarted = assigned.filter(
+        (l) => l.status === 'READY_FOR_SCAN' || (l.status === 'DRAFT' && l.assignedScannerUid === user.uid)
+      );
+      const allAvailable = [...available];
+      for (const lot of assignedNotStarted) {
+        if (!allAvailable.find((l) => l.id === lot.id)) {
+          allAvailable.push(lot);
+        }
+      }
+
+      // Meus lotes: ja peguei ou atribuidos em andamento
+      const assignedInProgress = assigned.filter(
+        (l) => l.status === 'CLOSING' || l.status === 'DONE'
+      );
+      const allMine = [...mine];
+      for (const lot of assignedInProgress) {
+        if (!allMine.find((l) => l.id === lot.id)) {
+          allMine.push(lot);
+        }
+      }
+
+      // Ordenar
+      allAvailable.sort((a, b) => (a.endAt?.toMillis() || 0) - (b.endAt?.toMillis() || 0));
+      allMine.sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
+
+      setAvailableLots(allAvailable);
+      setMyLots(allMine);
     } catch (err) {
       console.error('Erro ao carregar lotes:', err);
     } finally {

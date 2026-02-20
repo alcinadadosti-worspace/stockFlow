@@ -3,13 +3,13 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
-import { getLotsByUser } from '@/services/firestore/lots';
+import { getLotsByUser, getAssignedLotsSeparator } from '@/services/firestore/lots';
 import type { Lot } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Package, Plus, Clock, CheckCircle2, Loader2, FileEdit, ArrowLeft, Hourglass } from 'lucide-react';
+import { Package, Plus, Clock, CheckCircle2, Loader2, FileEdit, ArrowLeft, Hourglass, Star } from 'lucide-react';
 import { formatDateTimeBR, formatDuration } from '@/lib/utils';
 import { LOT_STATUS_LABELS } from '@/lib/constants';
 import { cn } from '@/lib/utils';
@@ -48,12 +48,29 @@ export default function SeparadorPage() {
     if (!user) return;
     setLoading(true);
     try {
-      const data = await getLotsByUser(user.uid);
-      // Filtrar apenas lotes do modo SEPARADOR ou GERAL criados por este usuario
-      const separatorLots = data.filter(
-        (l) => l.workMode === 'SEPARADOR' || !l.workMode || l.workMode === 'GERAL'
+      // Buscar lotes criados pelo usuario + lotes atribuidos como separador
+      const [ownLots, assignedLots] = await Promise.all([
+        getLotsByUser(user.uid),
+        getAssignedLotsSeparator(user.uid),
+      ]);
+      // Filtrar lotes proprios do modo SEPARADOR
+      const ownSeparatorLots = ownLots.filter(
+        (l) => l.workMode === 'SEPARADOR' || !l.workMode
       );
-      setLots(separatorLots);
+      // Combinar e remover duplicatas
+      const allLots = [...ownSeparatorLots];
+      for (const lot of assignedLots) {
+        if (!allLots.find((l) => l.id === lot.id)) {
+          allLots.push(lot);
+        }
+      }
+      // Ordenar por createdAt desc
+      allLots.sort((a, b) => {
+        const aTime = a.createdAt?.toMillis() || 0;
+        const bTime = b.createdAt?.toMillis() || 0;
+        return bTime - aTime;
+      });
+      setLots(allLots);
     } catch (err) {
       console.error('Erro ao carregar lotes:', err);
     } finally {

@@ -46,6 +46,16 @@ export async function getAllUsers(): Promise<AppUser[]> {
   return snap.docs.map((d) => ({ uid: d.id, ...d.data() }) as AppUser);
 }
 
+export async function getEstoquistas(): Promise<AppUser[]> {
+  const users = await getAllUsers();
+  return users.filter((u) => u.role === 'ESTOQUISTA');
+}
+
+export async function getAdmins(): Promise<AppUser[]> {
+  const users = await getAllUsers();
+  return users.filter((u) => u.role === 'ADMIN');
+}
+
 export async function incrementUserXp(uid: string, xp: number): Promise<void> {
   const userRef = doc(getFirebaseDb(), COLLECTION, uid);
   const snap = await getDoc(userRef);

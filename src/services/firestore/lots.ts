@@ -13,7 +13,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { getFirebaseDb } from '@/lib/firebase';
-import type { Lot, LotOrder, LotStatus, LotWorkMode, ParsedOrder } from '@/types';
+import type { Lot, LotOrder, LotStatus, LotWorkMode, LotAssignmentType, ParsedOrder } from '@/types';
 import { incrementUserXp, updateUserStreak } from './users';
 import { getPickingRules } from './pickingRules';
 import { calculateLotXp } from '@/lib/xp';
@@ -301,4 +301,149 @@ export async function completeLot(lotId: string): Promise<void> {
 export async function checkAllOrdersSealed(lotId: string): Promise<boolean> {
   const orders = await getLotOrders(lotId);
   return orders.every((o) => o.status === 'SEALED');
+}
+
+// ==================== FUNCOES PARA ADMIN ====================
+
+interface AdminLotAssignment {
+  assignmentType: LotAssignmentType;
+  // Para ASSIGNED_GENERAL
+  assignedGeneralUid?: string;
+  assignedGeneralName?: string;
+  // Para ASSIGNED_SEPARATED
+  assignedSeparatorUid?: string;
+  assignedSeparatorName?: string;
+  assignedScannerUid?: string;
+  assignedScannerName?: string;
+}
+
+// Cria lote pelo admin com atribuicao de usuarios
+export async function createAdminLot(
+  lotCode: string,
+  orders: ParsedOrder[],
+  createdByUid: string,
+  createdByName: string,
+  assignment: AdminLotAssignment,
+): Promise<string> {
+  const lotId = lotCode;
+  const now = Timestamp.now();
+
+  const totalItems = orders.reduce((sum, o) => sum + o.items, 0);
+  const cycle = orders[0]?.cycle || '';
+
+  // Determinar workMode baseado no tipo de atribuicao
+  let workMode: LotWorkMode = 'GERAL';
+  if (assignment.assignmentType === 'ASSIGNED_SEPARATED') {
+    workMode = 'SEPARADOR';
+  }
+
+  await setDoc(doc(getFirebaseDb(), 'lots', lotId), {
+    lotCode,
+    createdByUid,
+    createdByName,
+    status: 'DRAFT' as LotStatus,
+    cycle,
+    startAt: null,
+    endAt: null,
+    createdAt: now,
+    totals: { orders: orders.length, items: totalItems },
+    xpEarned: 0,
+    durationMs: 0,
+    workMode,
+    isAdminCreated: true,
+    assignmentType: assignment.assignmentType,
+    // Atribuicoes
+    assignedGeneralUid: assignment.assignedGeneralUid || null,
+    assignedGeneralName: assignment.assignedGeneralName || null,
+    assignedSeparatorUid: assignment.assignedSeparatorUid || null,
+    assignedSeparatorName: assignment.assignedSeparatorName || null,
+    assignedScannerUid: assignment.assignedScannerUid || null,
+    assignedScannerName: assignment.assignedScannerName || null,
+    // Se tem separador atribuido, ja preenche separatorUid
+    separatorUid: assignment.assignedSeparatorUid || assignment.assignedGeneralUid || null,
+    separatorName: assignment.assignedSeparatorName || assignment.assignedGeneralName || null,
+  });
+
+  const batch = writeBatch(getFirebaseDb());
+  for (const order of orders) {
+    const orderRef = doc(getFirebaseDb(), 'lots', lotId, 'orders', order.orderCode);
+    batch.set(orderRef, {
+      orderCode: order.orderCode,
+      cycle: order.cycle,
+      approvedAt: order.approvedAt ? Timestamp.fromDate(order.approvedAt) : null,
+      items: order.items,
+      status: 'PENDING',
+      sealedCode: null,
+      sealedAt: null,
+      createdAt: now,
+    });
+  }
+  await batch.commit();
+
+  return lotId;
+}
+
+// Busca lotes atribuidos a um usuario (funcao geral)
+export async function getAssignedLotsGeneral(uid: string): Promise<Lot[]> {
+  const q = query(
+    collection(getFirebaseDb(), 'lots'),
+    where('assignedGeneralUid', '==', uid),
+  );
+  const snap = await getDocs(q);
+  const lots = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Lot);
+  return lots.sort((a, b) => {
+    const aTime = a.createdAt?.toMillis() || 0;
+    const bTime = b.createdAt?.toMillis() || 0;
+    return bTime - aTime;
+  });
+}
+
+// Busca lotes atribuidos a um usuario (funcao separador)
+export async function getAssignedLotsSeparator(uid: string): Promise<Lot[]> {
+  const q = query(
+    collection(getFirebaseDb(), 'lots'),
+    where('assignedSeparatorUid', '==', uid),
+  );
+  const snap = await getDocs(q);
+  const lots = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Lot);
+  return lots.sort((a, b) => {
+    const aTime = a.createdAt?.toMillis() || 0;
+    const bTime = b.createdAt?.toMillis() || 0;
+    return bTime - aTime;
+  });
+}
+
+// Busca lotes atribuidos a um usuario (funcao bipador)
+export async function getAssignedLotsScanner(uid: string): Promise<Lot[]> {
+  const q = query(
+    collection(getFirebaseDb(), 'lots'),
+    where('assignedScannerUid', '==', uid),
+  );
+  const snap = await getDocs(q);
+  const lots = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Lot);
+  return lots.sort((a, b) => {
+    const aTime = a.createdAt?.toMillis() || 0;
+    const bTime = b.createdAt?.toMillis() || 0;
+    return bTime - aTime;
+  });
+}
+
+// Inicia lote atribuido (marca quem esta executando)
+export async function startAssignedLot(lotId: string, executorUid: string, executorName: string): Promise<void> {
+  await updateDoc(doc(getFirebaseDb(), 'lots', lotId), {
+    status: 'IN_PROGRESS' as LotStatus,
+    startAt: Timestamp.now(),
+    separatorUid: executorUid,
+    separatorName: executorName,
+  });
+}
+
+// Bipador assume lote atribuido a ele
+export async function startAssignedScanning(lotId: string, scannerUid: string, scannerName: string): Promise<void> {
+  await updateDoc(doc(getFirebaseDb(), 'lots', lotId), {
+    status: 'CLOSING' as LotStatus,
+    scannerUid,
+    scannerName,
+    scanStartAt: Timestamp.now(),
+  });
 }
