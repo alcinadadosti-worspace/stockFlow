@@ -1,19 +1,12 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Package, ScanLine, Layers, ClipboardList } from 'lucide-react';
 
 export default function FuncoesPage() {
-  const { user } = useAuth();
   const router = useRouter();
-
-  if (user?.role === 'ADMIN') {
-    router.push('/lotes');
-    return null;
-  }
 
   return (
     <div className="space-y-6">
