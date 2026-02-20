@@ -10,7 +10,17 @@
       "Bash(npx next build)",
       "Bash(cat:*)",
       "Bash(findstr:*)",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "Bash(git commit:*)",
+      "Bash(git push)",
+      "Bash(npx firebase --version)",
+      "Bash(npm ls:*)",
+      "Bash(npm install:*)",
+      "Bash(firebase login:*)",
+      "Bash(git push:*)",
+      "Bash(find:*)",
+      "Bash(ls:*)",
+      "Bash(npm run build:*)"
     ]
   }
 }

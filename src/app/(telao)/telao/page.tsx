@@ -122,24 +122,32 @@ export default function TelaoPage() {
       let itemsCount = 0;
 
       for (const l of todayLots) {
+        // Verificar participacao do usuario no lote
         const isSeparator = l.separatorUid === u.uid;
         const isScanner = l.scannerUid === u.uid && l.scannerUid !== l.separatorUid;
-        const isCreator = l.createdByUid === u.uid && !l.separatorUid && !l.scannerUid;
-        const isAssignedGeneral = l.assignedGeneralUid === u.uid && l.separatorUid === u.uid;
+        const isCreator = l.createdByUid === u.uid;
+        const isAssignedGeneral = l.assignedGeneralUid === u.uid;
 
-        // XP: cada um recebe sua parte
-        if (isSeparator && l.separatorXpEarned) {
-          xpPicking += l.separatorXpEarned;
-        } else if (isScanner && l.scannerXpEarned) {
-          xpPicking += l.scannerXpEarned;
-        } else if ((isCreator || isAssignedGeneral) && l.xpEarned) {
-          xpPicking += l.xpEarned;
+        // Verificar se eh modo separado (tem XP dividido) ou modo geral
+        const isSeparatedMode = l.separatorXpEarned && l.scannerXpEarned;
+
+        // XP: atribuir corretamente baseado no modo
+        if (isSeparatedMode) {
+          // Modo separado: cada um recebe sua parte
+          if (isSeparator) {
+            xpPicking += l.separatorXpEarned || 0;
+          } else if (isScanner) {
+            xpPicking += l.scannerXpEarned || 0;
+          }
+        } else {
+          // Modo geral: quem fez o trabalho recebe tudo
+          if (isSeparator || (isCreator && !l.separatorUid) || (isAssignedGeneral && !l.separatorUid)) {
+            xpPicking += l.xpEarned || 0;
+          }
         }
 
-        // Lotes, Pedidos, Itens: contar apenas para o trabalhador PRINCIPAL
-        // Isso evita duplicacao quando separador e bipador sao diferentes
-        // O bipador recebe XP mas nao conta para estatisticas de lotes/pedidos/itens
-        const isPrimaryWorker = isSeparator || isCreator || isAssignedGeneral;
+        // Lotes, Pedidos, Itens: contar para quem fez o trabalho principal
+        const isPrimaryWorker = isSeparator || (isCreator && !l.separatorUid);
 
         if (isPrimaryWorker) {
           lotsCount++;
