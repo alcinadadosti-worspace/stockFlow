@@ -44,8 +44,11 @@ export interface PickingRules {
   updatedAt?: Timestamp;
 }
 
-export type LotStatus = 'DRAFT' | 'IN_PROGRESS' | 'CLOSING' | 'DONE';
+export type LotStatus = 'DRAFT' | 'IN_PROGRESS' | 'READY_FOR_SCAN' | 'CLOSING' | 'DONE';
 export type OrderStatus = 'PENDING' | 'SEALED';
+
+// Tipo de função do estoquista para o lote
+export type LotWorkMode = 'GERAL' | 'SEPARADOR' | 'BIPADOR';
 
 export interface LotTotals {
   orders: number;
@@ -69,6 +72,15 @@ export interface Lot {
   durationMs?: number;
   scanDurationMs?: number;
   totalDurationMs?: number;
+  // Campos para funções separadas
+  workMode?: LotWorkMode; // GERAL = pessoa faz tudo, SEPARADOR/BIPADOR = funções separadas
+  separatorUid?: string;
+  separatorName?: string;
+  scannerUid?: string;
+  scannerName?: string;
+  // XP dividido por função
+  separatorXpEarned?: number;
+  scannerXpEarned?: number;
 }
 
 export interface LotOrder {

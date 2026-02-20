@@ -7,7 +7,7 @@ import { lotImportSchema, type LotImportForm } from '@/lib/schemas';
 import { parseSpreadsheet } from '@/lib/spreadsheet';
 import { createLot } from '@/services/firestore/lots';
 import { useAuth } from '@/hooks/useAuth';
-import type { ParsedOrder } from '@/types';
+import type { LotWorkMode, ParsedOrder } from '@/types';
 import {
   Dialog,
   DialogContent,
@@ -28,9 +28,10 @@ interface ImportLotDialogProps {
   open: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  workMode?: LotWorkMode;
 }
 
-export function ImportLotDialog({ open, onClose, onSuccess }: ImportLotDialogProps) {
+export function ImportLotDialog({ open, onClose, onSuccess, workMode = 'GERAL' }: ImportLotDialogProps) {
   const { user } = useAuth();
   const [step, setStep] = useState<'upload' | 'preview' | 'saving'>('upload');
   const [orders, setOrders] = useState<ParsedOrder[]>([]);
@@ -79,7 +80,7 @@ export function ImportLotDialog({ open, onClose, onSuccess }: ImportLotDialogPro
     setSaving(true);
     setStep('saving');
     try {
-      await createLot(data.lotCode, orders, user.uid, user.name);
+      await createLot(data.lotCode, orders, user.uid, user.name, workMode);
       toast.success('Lote importado com sucesso!', {
         description: `${orders.length} pedidos importados.`,
       });

@@ -13,7 +13,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { getFirebaseDb } from '@/lib/firebase';
-import type { Lot, LotOrder, LotStatus, ParsedOrder } from '@/types';
+import type { Lot, LotOrder, LotStatus, LotWorkMode, ParsedOrder } from '@/types';
 import { incrementUserXp, updateUserStreak } from './users';
 import { getPickingRules } from './pickingRules';
 import { calculateLotXp } from '@/lib/xp';
@@ -23,12 +23,18 @@ export async function createLot(
   orders: ParsedOrder[],
   createdByUid: string,
   createdByName: string,
+  workMode: LotWorkMode = 'GERAL',
 ): Promise<string> {
   const lotId = lotCode;
   const now = Timestamp.now();
 
   const totalItems = orders.reduce((sum, o) => sum + o.items, 0);
   const cycle = orders[0]?.cycle || '';
+
+  // Para modo SEPARADOR, já define o separador como o criador
+  const separatorData = workMode === 'SEPARADOR' || workMode === 'GERAL'
+    ? { separatorUid: createdByUid, separatorName: createdByName }
+    : {};
 
   await setDoc(doc(getFirebaseDb(), 'lots', lotId), {
     lotCode,
@@ -42,6 +48,8 @@ export async function createLot(
     totals: { orders: orders.length, items: totalItems },
     xpEarned: 0,
     durationMs: 0,
+    workMode,
+    ...separatorData,
   });
 
   const batch = writeBatch(getFirebaseDb());
@@ -106,6 +114,49 @@ export async function closeLot(lotId: string): Promise<void> {
     status: 'CLOSING' as LotStatus,
     endAt: Timestamp.now(),
   });
+}
+
+// Fecha o lote para o separador (modo SEPARADOR) - lote fica aguardando bipagem
+export async function closeLotForSeparator(lotId: string): Promise<void> {
+  await updateDoc(doc(getFirebaseDb(), 'lots', lotId), {
+    status: 'READY_FOR_SCAN' as LotStatus,
+    endAt: Timestamp.now(),
+  });
+}
+
+// Bipador pega um lote que está aguardando bipagem
+export async function claimLotForScanning(
+  lotId: string,
+  scannerUid: string,
+  scannerName: string,
+): Promise<void> {
+  await updateDoc(doc(getFirebaseDb(), 'lots', lotId), {
+    status: 'CLOSING' as LotStatus,
+    scannerUid,
+    scannerName,
+  });
+}
+
+// Busca lotes prontos para bipagem (READY_FOR_SCAN)
+export async function getLotsReadyForScan(): Promise<Lot[]> {
+  const q = query(
+    collection(getFirebaseDb(), 'lots'),
+    where('status', '==', 'READY_FOR_SCAN'),
+    orderBy('endAt', 'asc'),
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Lot);
+}
+
+// Busca lotes em bipagem do bipador específico
+export async function getLotsByScanner(uid: string): Promise<Lot[]> {
+  const q = query(
+    collection(getFirebaseDb(), 'lots'),
+    where('scannerUid', '==', uid),
+    orderBy('createdAt', 'desc'),
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Lot);
 }
 
 export async function startScanning(lotId: string): Promise<void> {
@@ -180,17 +231,50 @@ export async function completeLot(lotId: string): Promise<void> {
   const rules = await getPickingRules();
   const xpResult = calculateLotXp(lot.totals, durationMs, rules);
 
-  await updateDoc(doc(getFirebaseDb(), 'lots', lotId), {
-    status: 'DONE' as LotStatus,
-    xpEarned: xpResult.total,
-    durationMs,
-    scanEndAt: now,
-    scanDurationMs,
-    totalDurationMs,
-  });
+  // Verificar se é modo separado (SEPARADOR com bipador diferente)
+  const isSeparatedMode = lot.workMode === 'SEPARADOR' && lot.scannerUid && lot.separatorUid !== lot.scannerUid;
 
-  await incrementUserXp(lot.createdByUid, xpResult.total);
-  await updateUserStreak(lot.createdByUid);
+  if (isSeparatedMode) {
+    // Divide XP: 60% para separador, 40% para bipador
+    const separatorXp = Math.round(xpResult.total * 0.6);
+    const scannerXp = Math.round(xpResult.total * 0.4);
+
+    await updateDoc(doc(getFirebaseDb(), 'lots', lotId), {
+      status: 'DONE' as LotStatus,
+      xpEarned: xpResult.total,
+      separatorXpEarned: separatorXp,
+      scannerXpEarned: scannerXp,
+      durationMs,
+      scanEndAt: now,
+      scanDurationMs,
+      totalDurationMs,
+    });
+
+    // Dar XP para o separador
+    if (lot.separatorUid) {
+      await incrementUserXp(lot.separatorUid, separatorXp);
+      await updateUserStreak(lot.separatorUid);
+    }
+
+    // Dar XP para o bipador
+    if (lot.scannerUid) {
+      await incrementUserXp(lot.scannerUid, scannerXp);
+      await updateUserStreak(lot.scannerUid);
+    }
+  } else {
+    // Modo normal (GERAL ou mesmo usuário fez tudo)
+    await updateDoc(doc(getFirebaseDb(), 'lots', lotId), {
+      status: 'DONE' as LotStatus,
+      xpEarned: xpResult.total,
+      durationMs,
+      scanEndAt: now,
+      scanDurationMs,
+      totalDurationMs,
+    });
+
+    await incrementUserXp(lot.createdByUid, xpResult.total);
+    await updateUserStreak(lot.createdByUid);
+  }
 }
 
 export async function checkAllOrdersSealed(lotId: string): Promise<boolean> {

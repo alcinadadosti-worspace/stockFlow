@@ -3,13 +3,13 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
-import { getAllLots, getLotsByUser } from '@/services/firestore/lots';
+import { getLotsByUser } from '@/services/firestore/lots';
 import type { Lot } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Package, Plus, Clock, CheckCircle2, Loader2, FileEdit, Hourglass } from 'lucide-react';
+import { Package, Plus, Clock, CheckCircle2, Loader2, FileEdit, ArrowLeft, Hourglass } from 'lucide-react';
 import { formatDateTimeBR, formatDuration } from '@/lib/utils';
 import { LOT_STATUS_LABELS } from '@/lib/constants';
 import { cn } from '@/lib/utils';
@@ -37,47 +37,58 @@ function getStatusIcon(status: string) {
   }
 }
 
-export default function LotesPage() {
+export default function SeparadorPage() {
   const { user } = useAuth();
   const router = useRouter();
   const [lots, setLots] = useState<Lot[]>([]);
   const [loading, setLoading] = useState(true);
   const [showImport, setShowImport] = useState(false);
 
-  const isAdmin = user?.role === 'ADMIN';
-
   const loadData = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     try {
-      const data = isAdmin ? await getAllLots() : await getLotsByUser(user.uid);
-      setLots(data);
+      const data = await getLotsByUser(user.uid);
+      // Filtrar apenas lotes do modo SEPARADOR ou GERAL criados por este usuario
+      const separatorLots = data.filter(
+        (l) => l.workMode === 'SEPARADOR' || !l.workMode || l.workMode === 'GERAL'
+      );
+      setLots(separatorLots);
     } catch (err) {
       console.error('Erro ao carregar lotes:', err);
     } finally {
       setLoading(false);
     }
-  }, [user, isAdmin]);
+  }, [user]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
+  // Estatisticas
+  const lotsInProgress = lots.filter((l) => l.status === 'IN_PROGRESS').length;
+  const lotsReadyForScan = lots.filter((l) => l.status === 'READY_FOR_SCAN').length;
+  const lotsDone = lots.filter((l) => l.status === 'DONE').length;
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Lotes</h1>
+      <div className="flex items-center gap-4">
+        <Button variant="ghost" size="icon" onClick={() => router.push('/funcoes')}>
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
+        <div className="flex-1">
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+            <Package className="h-6 w-6 text-blue-500" />
+            Funcao Separador
+          </h1>
           <p className="text-sm text-muted-foreground">
-            Gerencie os lotes de separação de pedidos
+            Separe os itens dos lotes e deixe prontos para bipagem
           </p>
         </div>
-        {!isAdmin && (
-          <Button onClick={() => setShowImport(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Importar Lote
-          </Button>
-        )}
+        <Button onClick={() => setShowImport(true)} className="bg-blue-500 hover:bg-blue-600">
+          <Plus className="mr-2 h-4 w-4" />
+          Importar Lote
+        </Button>
       </div>
 
       {/* Stats */}
@@ -90,26 +101,20 @@ export default function LotesPage() {
         </Card>
         <Card>
           <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-blue-500">
-              {lots.filter((l) => l.status === 'IN_PROGRESS' || l.status === 'READY_FOR_SCAN' || l.status === 'CLOSING').length}
-            </div>
-            <p className="text-xs text-muted-foreground">Em Andamento</p>
+            <div className="text-2xl font-bold text-blue-500">{lotsInProgress}</div>
+            <p className="text-xs text-muted-foreground">Separando</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-emerald-500">
-              {lots.filter((l) => l.status === 'DONE').length}
-            </div>
-            <p className="text-xs text-muted-foreground">Concluídos</p>
+            <div className="text-2xl font-bold text-purple-500">{lotsReadyForScan}</div>
+            <p className="text-xs text-muted-foreground">Aguardando Bipagem</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
-            <div className="text-2xl font-bold">
-              {lots.reduce((sum, l) => sum + (l.totals?.orders || 0), 0)}
-            </div>
-            <p className="text-xs text-muted-foreground">Total de Pedidos</p>
+            <div className="text-2xl font-bold text-emerald-500">{lotsDone}</div>
+            <p className="text-xs text-muted-foreground">Concluidos</p>
           </CardContent>
         </Card>
       </div>
@@ -119,7 +124,7 @@ export default function LotesPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Package className="h-5 w-5" />
-            Lista de Lotes
+            Meus Lotes (Separador)
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -133,15 +138,13 @@ export default function LotesPage() {
             <div className="py-12 text-center">
               <Package className="mx-auto mb-4 h-12 w-12 text-muted-foreground/50" />
               <p className="text-muted-foreground">Nenhum lote encontrado</p>
-              {!isAdmin && (
-                <Button
-                  variant="outline"
-                  className="mt-4"
-                  onClick={() => setShowImport(true)}
-                >
-                  Importar Primeiro Lote
-                </Button>
-              )}
+              <Button
+                variant="outline"
+                className="mt-4"
+                onClick={() => setShowImport(true)}
+              >
+                Importar Primeiro Lote
+              </Button>
             </div>
           ) : (
             <div className="space-y-2">
@@ -149,10 +152,10 @@ export default function LotesPage() {
                 <div
                   key={lot.id}
                   className="flex cursor-pointer items-center gap-4 rounded-lg border p-4 transition-colors hover:bg-accent/50"
-                  onClick={() => router.push(`/lotes/${lot.id}`)}
+                  onClick={() => router.push(`/separador/${lot.id}`)}
                 >
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
-                    <Package className="h-5 w-5 text-muted-foreground" />
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10">
+                    <Package className="h-5 w-5 text-blue-500" />
                   </div>
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
@@ -161,11 +164,15 @@ export default function LotesPage() {
                         {getStatusIcon(lot.status)}
                         {LOT_STATUS_LABELS[lot.status]}
                       </Badge>
+                      {lot.workMode === 'SEPARADOR' && (
+                        <Badge variant="outline" className="text-blue-500 border-blue-500/30">
+                          Separador
+                        </Badge>
+                      )}
                     </div>
                     <p className="text-sm text-muted-foreground">
                       {lot.totals?.orders || 0} pedidos &middot; {lot.totals?.items || 0} itens
                       {lot.cycle && ` &middot; Ciclo ${lot.cycle}`}
-                      {isAdmin && lot.createdByName && ` · por ${lot.createdByName}`}
                     </p>
                   </div>
                   <div className="text-right text-sm">
@@ -174,12 +181,12 @@ export default function LotesPage() {
                     </p>
                     {lot.durationMs && lot.durationMs > 0 && (
                       <p className="text-xs text-muted-foreground">
-                        Duração: {formatDuration(lot.durationMs)}
+                        Separacao: {formatDuration(lot.durationMs)}
                       </p>
                     )}
-                    {lot.xpEarned && lot.xpEarned > 0 && (
+                    {lot.separatorXpEarned && lot.separatorXpEarned > 0 && (
                       <Badge variant="outline" className="mt-1 text-amber-500">
-                        +{lot.xpEarned} XP
+                        +{lot.separatorXpEarned} XP
                       </Badge>
                     )}
                   </div>
@@ -197,6 +204,7 @@ export default function LotesPage() {
           setShowImport(false);
           loadData();
         }}
+        workMode="SEPARADOR"
       />
     </div>
   );

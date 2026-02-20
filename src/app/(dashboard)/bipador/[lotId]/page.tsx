@@ -6,8 +6,6 @@ import { useAuth } from '@/hooks/useAuth';
 import {
   getLot,
   getLotOrders,
-  startLot,
-  closeLot,
   sealOrder,
   completeLot,
   checkAllOrdersSealed,
@@ -26,7 +24,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import {
   Package,
   Play,
-  Square,
   CheckCircle2,
   Clock,
   ArrowLeft,
@@ -37,7 +34,6 @@ import {
   Hash,
   Boxes,
   ScanLine,
-  Hourglass,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDateTimeBR, formatDuration } from '@/lib/utils';
@@ -68,7 +64,7 @@ function LiveTimer({ startMs, endMs, label, icon: Icon, color }: {
 
   const elapsed = (endMs || now) - startMs;
   const isRunning = !endMs;
-  const colors = colorMap[color] || colorMap.blue;
+  const colors = colorMap[color] || colorMap.amber;
 
   return (
     <Card className={cn('border', isRunning && colors.border)}>
@@ -90,7 +86,7 @@ function LiveTimer({ startMs, endMs, label, icon: Icon, color }: {
   );
 }
 
-export default function LotDetailPage() {
+export default function BipadorLotDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { user } = useAuth();
@@ -144,32 +140,6 @@ export default function LotDetailPage() {
     }
   }, [lot?.status, lot?.scanStartAt, selectedOrderId]);
 
-  async function handleStart() {
-    setActionLoading(true);
-    try {
-      await startLot(lotId);
-      toast.success('Lote iniciado! Bom trabalho!');
-      await loadData();
-    } catch (err) {
-      toast.error('Erro ao iniciar lote');
-    } finally {
-      setActionLoading(false);
-    }
-  }
-
-  async function handleClose() {
-    setActionLoading(true);
-    try {
-      await closeLot(lotId);
-      toast.success('Lote fechado! Agora encerre os pedidos.');
-      await loadData();
-    } catch (err) {
-      toast.error('Erro ao fechar lote');
-    } finally {
-      setActionLoading(false);
-    }
-  }
-
   async function handleStartScanning() {
     setActionLoading(true);
     try {
@@ -191,7 +161,7 @@ export default function LotDetailPage() {
 
     const code = sealInput.trim();
     if (!/^\d{10}$/.test(code)) {
-      setSealError('Lacre deve ter exatamente 10 dígitos.');
+      setSealError('Lacre deve ter exatamente 10 digitos.');
       return;
     }
 
@@ -218,7 +188,7 @@ export default function LotDetailPage() {
       const allSealed = await checkAllOrdersSealed(lotId);
       if (allSealed) {
         await completeLot(lotId);
-        toast.success('Lote concluído! Parabéns!');
+        toast.success('Lote concluido! Parabens!');
         confetti({
           particleCount: 100,
           spread: 70,
@@ -245,8 +215,8 @@ export default function LotDetailPage() {
     return (
       <div className="space-y-6">
         <Skeleton className="h-8 w-64" />
-        <div className="grid gap-4 md:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => (
+        <div className="grid gap-4 md:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
             <Skeleton key={i} className="h-24" />
           ))}
         </div>
@@ -259,8 +229,8 @@ export default function LotDetailPage() {
     return (
       <div className="flex flex-col items-center py-20">
         <Package className="mb-4 h-12 w-12 text-muted-foreground/50" />
-        <p className="text-muted-foreground">Lote não encontrado</p>
-        <Button variant="outline" className="mt-4" onClick={() => router.push('/lotes')}>
+        <p className="text-muted-foreground">Lote nao encontrado</p>
+        <Button variant="outline" className="mt-4" onClick={() => router.push('/bipador')}>
           Voltar
         </Button>
       </div>
@@ -272,28 +242,21 @@ export default function LotDetailPage() {
   const progress = totalOrders > 0 ? (sealedCount / totalOrders) * 100 : 0;
 
   // Timer calculations
-  const startMs = lot.startAt?.toMillis() || 0;
-  const endMs = lot.endAt?.toMillis() || undefined;
   const scanStartMs = lot.scanStartAt?.toMillis() || undefined;
   const scanEndMs = lot.scanEndAt?.toMillis() || undefined;
 
-  // XP preview
-  const durationMs = lot.startAt && lot.endAt
-    ? lot.endAt.toMillis() - lot.startAt.toMillis()
-    : lot.startAt
-      ? Date.now() - lot.startAt.toMillis()
-      : 0;
+  // XP preview (baseado no tempo de separacao do separador)
+  const durationMs = lot.durationMs || 0;
   const xpPreview = rules ? calculateLotXp(lot.totals, durationMs, rules) : null;
 
   const nextPendingOrder = orders.find((o) => o.status === 'PENDING');
   const isScanningStarted = !!lot.scanStartAt;
-  const isAdmin = user?.role === 'ADMIN';
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => router.push('/lotes')}>
+        <Button variant="ghost" size="icon" onClick={() => router.push('/bipador')}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div>
@@ -303,16 +266,18 @@ export default function LotDetailPage() {
             </h1>
             <Badge className={cn(
               lot.status === 'DONE' ? 'bg-emerald-500/10 text-emerald-500' :
-              lot.status === 'IN_PROGRESS' ? 'bg-blue-500/10 text-blue-500' :
-              lot.status === 'READY_FOR_SCAN' ? 'bg-purple-500/10 text-purple-500' :
               lot.status === 'CLOSING' ? 'bg-amber-500/10 text-amber-500' :
               'bg-slate-500/10 text-slate-500',
             )}>
               {LOT_STATUS_LABELS[lot.status]}
             </Badge>
+            <Badge variant="outline" className="text-amber-500 border-amber-500/30">
+              Modo Bipador
+            </Badge>
           </div>
           <p className="text-sm text-muted-foreground">
-            Ciclo {lot.cycle} &middot; Criado por {lot.createdByName || 'N/A'}
+            Separado por: {lot.separatorName || lot.createdByName || 'N/A'}
+            {lot.durationMs && ` · Tempo de separacao: ${formatDuration(lot.durationMs)}`}
           </p>
         </div>
       </div>
@@ -321,10 +286,10 @@ export default function LotDetailPage() {
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardContent className="flex items-center gap-3 pt-6">
-            <Hash className="h-8 w-8 text-blue-500" />
+            <Hash className="h-8 w-8 text-amber-500" />
             <div>
               <p className="text-2xl font-bold">{totalOrders}</p>
-              <p className="text-xs text-muted-foreground">Pedidos</p>
+              <p className="text-xs text-muted-foreground">Pedidos para Bipar</p>
             </div>
           </CardContent>
         </Card>
@@ -339,114 +304,32 @@ export default function LotDetailPage() {
         </Card>
       </div>
 
-      {/* Chronometers Section */}
-      {(lot.status !== 'DRAFT') && (
+      {/* Timer de Bipagem */}
+      {scanStartMs && (
         <div>
           <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
             <Timer className="h-5 w-5" />
-            Cronômetros
+            Cronometro de Bipagem
           </h2>
-          <div className="grid gap-4 md:grid-cols-3">
-            {/* Timer 1: Separação de Itens (startAt → endAt) */}
-            {startMs > 0 && (
-              <LiveTimer
-                startMs={startMs}
-                endMs={endMs}
-                label="Separação de Itens"
-                icon={Package}
-                color="blue"
-              />
-            )}
-
-            {/* Timer 2: Bipagem de Pedidos (scanStartAt → scanEndAt) */}
-            {scanStartMs && (
-              <LiveTimer
-                startMs={scanStartMs}
-                endMs={scanEndMs}
-                label="Bipagem de Pedidos"
-                icon={ScanLine}
-                color="amber"
-              />
-            )}
-
-            {/* Timer 3: Geral (endAt → scanEndAt) - from lot close to last order sealed */}
-            {endMs && (
-              <LiveTimer
-                startMs={endMs}
-                endMs={scanEndMs}
-                label="Tempo Geral (Fechamento → Fim)"
-                icon={Clock}
-                color="violet"
-              />
-            )}
-          </div>
+          <LiveTimer
+            startMs={scanStartMs}
+            endMs={scanEndMs}
+            label="Tempo de Bipagem"
+            icon={ScanLine}
+            color="amber"
+          />
         </div>
       )}
 
-      {/* XP Preview */}
-      {(lot.status === 'IN_PROGRESS' || lot.status === 'CLOSING') && xpPreview && (
-        <Card>
-          <CardContent className="flex items-center gap-3 pt-6">
-            <Zap className="h-8 w-8 text-amber-500" />
-            <div>
-              <p className="text-2xl font-bold text-amber-500">
-                ~{xpPreview.total}
-              </p>
-              <p className="text-xs text-muted-foreground">XP Estimado</p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Actions (hidden for admin - read only) */}
-      {!isAdmin && lot.status === 'DRAFT' && (
-        <Card>
-          <CardContent className="flex items-center justify-between pt-6">
-            <div>
-              <p className="font-medium">Pronto para iniciar?</p>
-              <p className="text-sm text-muted-foreground">
-                Clique quando sair para buscar os itens
-              </p>
-            </div>
-            <Button onClick={handleStart} disabled={actionLoading} size="lg">
-              <Play className="mr-2 h-4 w-4" />
-              Iniciar Lote
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {!isAdmin && lot.status === 'IN_PROGRESS' && (
-        <Card>
-          <CardContent className="flex items-center justify-between pt-6">
-            <div>
-              <p className="font-medium">Retornou com os itens?</p>
-              <p className="text-sm text-muted-foreground">
-                Clique para fechar o lote e começar a encerrar pedidos
-              </p>
-              {lot.startAt && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Iniciado em {formatDateTimeBR(lot.startAt.toDate())}
-                </p>
-              )}
-            </div>
-            <Button onClick={handleClose} disabled={actionLoading} size="lg" variant="secondary">
-              <Square className="mr-2 h-4 w-4" />
-              Fechar Lote
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Bipar Pedido Agora? Button */}
-      {!isAdmin && lot.status === 'CLOSING' && !isScanningStarted && (
+      {/* Iniciar Bipagem Button */}
+      {lot.status === 'CLOSING' && !isScanningStarted && (
         <Card className="border-amber-500/30 bg-amber-500/5">
           <CardContent className="flex flex-col items-center justify-center pt-6 pb-6 gap-4">
             <ScanLine className="h-12 w-12 text-amber-500" />
             <div className="text-center">
-              <p className="text-lg font-semibold">Bipar pedidos agora?</p>
+              <p className="text-lg font-semibold">Iniciar Bipagem?</p>
               <p className="text-sm text-muted-foreground">
-                O cronômetro de bipagem será iniciado ao clicar
+                O cronometro sera iniciado ao clicar
               </p>
             </div>
             <Button
@@ -463,7 +346,7 @@ export default function LotDetailPage() {
       )}
 
       {/* Seal Orders */}
-      {!isAdmin && lot.status === 'CLOSING' && isScanningStarted && (
+      {lot.status === 'CLOSING' && isScanningStarted && (
         <Card className="border-amber-500/30">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -480,8 +363,8 @@ export default function LotDetailPage() {
             </div>
 
             {nextPendingOrder && (
-              <div className="rounded-lg border-2 border-primary/30 bg-primary/5 p-4">
-                <p className="text-xs text-muted-foreground mb-1">Próximo pedido:</p>
+              <div className="rounded-lg border-2 border-amber-500/30 bg-amber-500/5 p-4">
+                <p className="text-xs text-muted-foreground mb-1">Proximo pedido:</p>
                 <p className="text-xl font-mono font-bold">
                   {selectedOrderId || nextPendingOrder.id}
                 </p>
@@ -498,7 +381,7 @@ export default function LotDetailPage() {
                       setSealError('');
                     }}
                     onKeyDown={handleSealKeyDown}
-                    placeholder="Bipe ou digite o código da caixa (10 dígitos)"
+                    placeholder="Bipe ou digite o codigo da caixa (10 digitos)"
                     maxLength={10}
                     className="font-mono text-lg"
                     autoFocus
@@ -507,6 +390,7 @@ export default function LotDetailPage() {
                     onClick={handleSeal}
                     disabled={actionLoading || sealInput.length !== 10}
                     size="lg"
+                    className="bg-amber-500 hover:bg-amber-600"
                   >
                     <CheckCircle2 className="mr-2 h-4 w-4" />
                     Encerrar
@@ -532,36 +416,29 @@ export default function LotDetailPage() {
         </Card>
       )}
 
-      {/* Results for completed lots - 3 Chronometers Summary */}
+      {/* Results for completed lots */}
       {lot.status === 'DONE' && (
         <Card className="border-emerald-500/30">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-emerald-500">
               <Timer className="h-5 w-5" />
-              Resultados dos Cronômetros
+              Resultados
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-2">
               <div className="rounded-lg bg-blue-500/10 border border-blue-500/20 p-4 text-center">
                 <Package className="h-6 w-6 text-blue-500 mx-auto mb-2" />
-                <p className="text-xs text-muted-foreground mb-1">Separação de Itens</p>
+                <p className="text-xs text-muted-foreground mb-1">Separacao ({lot.separatorName})</p>
                 <p className="text-xl font-bold font-mono text-blue-500">
                   {lot.durationMs ? formatDuration(lot.durationMs) : '--'}
                 </p>
               </div>
               <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-4 text-center">
                 <ScanLine className="h-6 w-6 text-amber-500 mx-auto mb-2" />
-                <p className="text-xs text-muted-foreground mb-1">Bipagem de Pedidos</p>
+                <p className="text-xs text-muted-foreground mb-1">Bipagem (Voce)</p>
                 <p className="text-xl font-bold font-mono text-amber-500">
                   {lot.scanDurationMs ? formatDuration(lot.scanDurationMs) : '--'}
-                </p>
-              </div>
-              <div className="rounded-lg bg-violet-500/10 border border-violet-500/20 p-4 text-center">
-                <Clock className="h-6 w-6 text-violet-500 mx-auto mb-2" />
-                <p className="text-xs text-muted-foreground mb-1">Tempo Geral</p>
-                <p className="text-xl font-bold font-mono text-violet-500">
-                  {lot.totalDurationMs ? formatDuration(lot.totalDurationMs) : '--'}
                 </p>
               </div>
             </div>
@@ -570,7 +447,7 @@ export default function LotDetailPage() {
       )}
 
       {/* XP Breakdown for completed lots */}
-      {lot.status === 'DONE' && xpPreview && (
+      {lot.status === 'DONE' && (
         <Card className="border-amber-500/30">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-amber-500">
@@ -579,30 +456,19 @@ export default function LotDetailPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-3 md:grid-cols-4">
-              <div className="rounded-lg bg-muted p-3 text-center">
-                <p className="text-xs text-muted-foreground">Base</p>
-                <p className="text-lg font-bold">{xpPreview.base}</p>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-lg bg-blue-500/10 border border-blue-500/20 p-4 text-center">
+                <p className="text-xs text-muted-foreground">Separador ({lot.separatorName})</p>
+                <p className="text-2xl font-bold text-blue-500">{lot.separatorXpEarned || Math.round((lot.xpEarned || 0) * 0.6)} XP</p>
               </div>
-              <div className="rounded-lg bg-muted p-3 text-center">
-                <p className="text-xs text-muted-foreground">Pedidos</p>
-                <p className="text-lg font-bold">{xpPreview.orderXp}</p>
-              </div>
-              <div className="rounded-lg bg-muted p-3 text-center">
-                <p className="text-xs text-muted-foreground">Itens</p>
-                <p className="text-lg font-bold">{xpPreview.itemXp}</p>
-              </div>
-              <div className="rounded-lg bg-muted p-3 text-center">
-                <p className="text-xs text-muted-foreground">
-                  Bônus {xpPreview.bonusPercent > 0 ? `(+${xpPreview.bonusPercent}%)` : ''}
-                </p>
-                <p className="text-lg font-bold">{xpPreview.bonus}</p>
+              <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-4 text-center">
+                <p className="text-xs text-muted-foreground">Bipador (Voce)</p>
+                <p className="text-2xl font-bold text-amber-500">{lot.scannerXpEarned || Math.round((lot.xpEarned || 0) * 0.4)} XP</p>
               </div>
             </div>
             <Separator className="my-4" />
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Velocidade: {xpPreview.speed} itens/min</span>
-              <span className="text-xl font-bold text-amber-500">Total: {lot.xpEarned || xpPreview.total} XP</span>
+            <div className="text-center">
+              <span className="text-xl font-bold">Total do Lote: {lot.xpEarned || 0} XP</span>
             </div>
           </CardContent>
         </Card>
@@ -621,7 +487,7 @@ export default function LotDetailPage() {
                 className={cn(
                   'flex items-center gap-4 rounded-lg border p-3 transition-colors',
                   order.status === 'SEALED' && 'bg-emerald-500/5 border-emerald-500/20',
-                  selectedOrderId === order.id && order.status === 'PENDING' && 'border-primary bg-primary/5',
+                  selectedOrderId === order.id && order.status === 'PENDING' && 'border-amber-500 bg-amber-500/5',
                   lot.status === 'CLOSING' && isScanningStarted && order.status === 'PENDING' && 'cursor-pointer hover:bg-accent/50',
                 )}
                 onClick={() => {
@@ -649,7 +515,6 @@ export default function LotDetailPage() {
                   </div>
                   <p className="text-xs text-muted-foreground">
                     {order.items} itens &middot; Ciclo {order.cycle}
-                    {order.approvedAt && ` \u00b7 Aprovado: ${formatDateTimeBR(order.approvedAt.toDate())}`}
                   </p>
                 </div>
                 <div className="text-right text-sm">

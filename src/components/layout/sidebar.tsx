@@ -17,6 +17,8 @@ import {
   ChevronRight,
   Boxes,
   Monitor,
+  Layers,
+  ScanLine,
 } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -26,6 +28,7 @@ const mainNav = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/leaderboard', label: 'Ranking', icon: Trophy },
   { href: '/tarefas', label: 'Tarefas', icon: ClipboardList },
+  { href: '/funcoes', label: 'Funcoes', icon: Layers },
   { href: '/lotes', label: 'Lotes', icon: Package },
 ];
 

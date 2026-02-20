@@ -3,9 +3,22 @@ export const TIMEZONE = 'America/Maceio';
 export const LOT_STATUS = {
   DRAFT: 'DRAFT',
   IN_PROGRESS: 'IN_PROGRESS',
+  READY_FOR_SCAN: 'READY_FOR_SCAN',
   CLOSING: 'CLOSING',
   DONE: 'DONE',
 } as const;
+
+export const WORK_MODE = {
+  GERAL: 'GERAL',
+  SEPARADOR: 'SEPARADOR',
+  BIPADOR: 'BIPADOR',
+} as const;
+
+export const WORK_MODE_LABELS: Record<string, string> = {
+  GERAL: 'Função Completa',
+  SEPARADOR: 'Separador',
+  BIPADOR: 'Bipador',
+};
 
 export const ORDER_STATUS = {
   PENDING: 'PENDING',
@@ -20,6 +33,7 @@ export const USER_ROLE = {
 export const LOT_STATUS_LABELS: Record<string, string> = {
   DRAFT: 'Rascunho',
   IN_PROGRESS: 'Em Andamento',
+  READY_FOR_SCAN: 'Aguardando Bipagem',
   CLOSING: 'Encerrando Pedidos',
   DONE: 'Concluído',
 };
