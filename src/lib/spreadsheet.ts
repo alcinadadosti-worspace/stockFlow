@@ -158,3 +158,90 @@ export function parseSpreadsheet(buffer: ArrayBuffer, fileName: string): Spreads
     errors,
   };
 }
+
+// Parser simplificado para pedido avulso (apenas Pedido e Itens obrigatorios)
+export interface SingleOrderParseResult {
+  success: boolean;
+  orderCode: string;
+  items: number;
+  cycle?: string;
+  errors: string[];
+}
+
+export function parseSingleOrderSpreadsheet(buffer: ArrayBuffer): SingleOrderParseResult {
+  const errors: string[] = [];
+
+  let workbook: XLSX.WorkBook;
+  try {
+    workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
+  } catch {
+    return { success: false, orderCode: '', items: 0, errors: ['Nao foi possivel ler o arquivo. Verifique o formato (CSV ou XLSX).'] };
+  }
+
+  const sheetName = workbook.SheetNames[0];
+  if (!sheetName) {
+    return { success: false, orderCode: '', items: 0, errors: ['Arquivo sem planilha/aba.'] };
+  }
+
+  const sheet = workbook.Sheets[sheetName];
+  const rawData: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+  if (rawData.length === 0) {
+    return { success: false, orderCode: '', items: 0, errors: ['Planilha vazia.'] };
+  }
+
+  if (rawData.length > 1) {
+    return { success: false, orderCode: '', items: 0, errors: ['Pedido avulso deve conter apenas 1 linha de dados. Use a funcao de Lotes para multiplos pedidos.'] };
+  }
+
+  // Map headers
+  const rawHeaders = Object.keys(rawData[0]);
+  const headerMap: Record<string, string> = {};
+  for (const h of rawHeaders) {
+    const normalized = normalizeHeader(h);
+    const mapped = COLUMN_MAP[normalized];
+    if (mapped) {
+      headerMap[h] = mapped;
+    }
+  }
+
+  const mappedFields = Object.values(headerMap);
+
+  // Apenas Pedido e Itens sao obrigatorios
+  if (!mappedFields.includes('orderCode')) {
+    return { success: false, orderCode: '', items: 0, errors: ['Coluna "Pedido" nao encontrada.', `Colunas encontradas: ${rawHeaders.join(', ')}`] };
+  }
+  if (!mappedFields.includes('items')) {
+    return { success: false, orderCode: '', items: 0, errors: ['Coluna "Itens" nao encontrada.', `Colunas encontradas: ${rawHeaders.join(', ')}`] };
+  }
+
+  const row = rawData[0];
+  const mapped: Record<string, unknown> = {};
+  for (const [rawKey, mappedKey] of Object.entries(headerMap)) {
+    mapped[mappedKey] = row[rawKey];
+  }
+
+  // orderCode
+  const orderCodeRaw = String(mapped.orderCode || '').trim();
+  if (!orderCodeRaw) {
+    return { success: false, orderCode: '', items: 0, errors: ['Codigo do pedido vazio.'] };
+  }
+
+  // items
+  const itemsRaw = mapped.items;
+  const items = parseInt(String(itemsRaw), 10);
+  if (isNaN(items) || items < 1) {
+    return { success: false, orderCode: '', items: 0, errors: [`Quantidade de itens "${itemsRaw}" invalida.`] };
+  }
+
+  // cycle (opcional)
+  const cycle = mapped.cycle ? String(mapped.cycle).trim() : undefined;
+
+  return {
+    success: true,
+    orderCode: orderCodeRaw,
+    items,
+    cycle,
+    errors: [],
+  };
+}

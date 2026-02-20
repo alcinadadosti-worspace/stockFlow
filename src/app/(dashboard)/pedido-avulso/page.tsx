@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { getSingleOrdersByUser, createSingleOrder } from '@/services/firestore/singleOrders';
+import { parseSingleOrderSpreadsheet } from '@/lib/spreadsheet';
 import type { SingleOrder } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Dialog,
   DialogContent,
@@ -28,10 +30,15 @@ import {
   ScanLine,
   ArrowLeft,
   Hourglass,
+  Upload,
+  FileSpreadsheet,
+  AlertCircle,
+  Boxes,
 } from 'lucide-react';
 import { formatDateTimeBR, formatDuration } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { useDropzone } from 'react-dropzone';
 
 const STATUS_LABELS: Record<string, string> = {
   DRAFT: 'Rascunho',
@@ -73,6 +80,11 @@ export default function PedidoAvulsoPage() {
   const [orderCode, setOrderCode] = useState('');
   const [items, setItems] = useState('');
 
+  // Estado para importacao de arquivo
+  const [importedData, setImportedData] = useState<{ orderCode: string; items: number; cycle?: string } | null>(null);
+  const [importErrors, setImportErrors] = useState<string[]>([]);
+  const [fileName, setFileName] = useState('');
+
   const loadData = useCallback(async () => {
     if (!user) return;
     setLoading(true);
@@ -89,6 +101,47 @@ export default function PedidoAvulsoPage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  const onDrop = useCallback(async (acceptedFiles: File[]) => {
+    const file = acceptedFiles[0];
+    if (!file) return;
+
+    setFileName(file.name);
+    setImportErrors([]);
+    setImportedData(null);
+
+    const buffer = await file.arrayBuffer();
+    const result = parseSingleOrderSpreadsheet(buffer);
+
+    if (!result.success) {
+      setImportErrors(result.errors);
+      return;
+    }
+
+    setImportedData({
+      orderCode: result.orderCode,
+      items: result.items,
+      cycle: result.cycle,
+    });
+  }, []);
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: {
+      'text/csv': ['.csv'],
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+      'application/vnd.ms-excel': ['.xls'],
+    },
+    maxFiles: 1,
+  });
+
+  function resetDialog() {
+    setOrderCode('');
+    setItems('');
+    setImportedData(null);
+    setImportErrors([]);
+    setFileName('');
+  }
 
   async function handleCreate() {
     if (!user) return;
@@ -108,8 +161,24 @@ export default function PedidoAvulsoPage() {
       const id = await createSingleOrder(orderCode.trim(), itemsNum, user.uid, user.name);
       toast.success('Pedido criado!');
       setShowCreate(false);
-      setOrderCode('');
-      setItems('');
+      resetDialog();
+      router.push(`/pedido-avulso/${id}`);
+    } catch (err) {
+      toast.error('Erro ao criar pedido');
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function handleCreateFromImport() {
+    if (!user || !importedData) return;
+
+    setCreating(true);
+    try {
+      const id = await createSingleOrder(importedData.orderCode, importedData.items, user.uid, user.name);
+      toast.success('Pedido criado!');
+      setShowCreate(false);
+      resetDialog();
       router.push(`/pedido-avulso/${id}`);
     } catch (err) {
       toast.error('Erro ao criar pedido');
@@ -245,54 +314,166 @@ export default function PedidoAvulsoPage() {
       </Card>
 
       {/* Create Dialog */}
-      <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent>
+      <Dialog open={showCreate} onOpenChange={(open) => { setShowCreate(open); if (!open) resetDialog(); }}>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Novo Pedido Avulso</DialogTitle>
             <DialogDescription>
-              Cadastre um pedido individual para separacao
+              Importe um arquivo ou cadastre manualmente
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 pt-4">
-            <div className="space-y-2">
-              <Label>Codigo do Pedido</Label>
-              <Input
-                placeholder="Ex: 123456789"
-                value={orderCode}
-                onChange={(e) => setOrderCode(e.target.value)}
-                className="font-mono"
-              />
-            </div>
+          <Tabs defaultValue="import" className="pt-2">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="import" className="gap-2">
+                <Upload className="h-4 w-4" />
+                Importar
+              </TabsTrigger>
+              <TabsTrigger value="manual" className="gap-2">
+                <ClipboardList className="h-4 w-4" />
+                Manual
+              </TabsTrigger>
+            </TabsList>
 
-            <div className="space-y-2">
-              <Label>Quantidade de Itens</Label>
-              <Input
-                type="number"
-                placeholder="Ex: 5"
-                min={1}
-                value={items}
-                onChange={(e) => setItems(e.target.value)}
-              />
-            </div>
+            <TabsContent value="import" className="space-y-4 pt-4">
+              {!importedData ? (
+                <>
+                  <div
+                    {...getRootProps()}
+                    className={cn(
+                      'flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 transition-colors cursor-pointer',
+                      isDragActive
+                        ? 'border-green-500 bg-green-500/5'
+                        : 'border-muted-foreground/25 hover:border-green-500/50',
+                    )}
+                  >
+                    <input {...getInputProps()} />
+                    <Upload className="mb-4 h-10 w-10 text-muted-foreground" />
+                    {isDragActive ? (
+                      <p className="text-sm font-medium">Solte o arquivo aqui...</p>
+                    ) : (
+                      <>
+                        <p className="text-sm font-medium">
+                          Arraste e solte o arquivo aqui
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          ou clique para selecionar (CSV, XLSX)
+                        </p>
+                      </>
+                    )}
+                  </div>
 
-            <div className="flex gap-2 pt-4">
-              <Button
-                variant="outline"
-                className="flex-1"
-                onClick={() => setShowCreate(false)}
-              >
-                Cancelar
-              </Button>
-              <Button
-                className="flex-1 bg-green-500 hover:bg-green-600"
-                onClick={handleCreate}
-                disabled={creating}
-              >
-                {creating ? 'Criando...' : 'Criar Pedido'}
-              </Button>
-            </div>
-          </div>
+                  {importErrors.length > 0 && (
+                    <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3">
+                      <div className="flex items-center gap-2 text-destructive mb-2">
+                        <AlertCircle className="h-4 w-4" />
+                        <span className="text-sm font-medium">Erro na importacao</span>
+                      </div>
+                      <ul className="text-sm text-destructive/80 space-y-1">
+                        {importErrors.map((err, i) => (
+                          <li key={i}>{err}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  <p className="text-xs text-muted-foreground text-center">
+                    O arquivo deve conter as colunas: Pedido, Itens (e opcionalmente Ciclo)
+                  </p>
+                </>
+              ) : (
+                <>
+                  {/* Dados importados */}
+                  <div className="flex items-center gap-2 rounded-lg bg-green-500/10 p-3">
+                    <FileSpreadsheet className="h-5 w-5 text-green-500" />
+                    <div>
+                      <p className="text-sm font-medium">{fileName}</p>
+                      <p className="text-xs text-muted-foreground">Arquivo importado</p>
+                    </div>
+                  </div>
+
+                  <Card className="border-green-500/30 bg-green-500/5">
+                    <CardContent className="pt-6">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="text-center">
+                          <Package className="h-8 w-8 text-green-500 mx-auto mb-2" />
+                          <p className="text-2xl font-bold font-mono">{importedData.orderCode}</p>
+                          <p className="text-xs text-muted-foreground">Codigo do Pedido</p>
+                        </div>
+                        <div className="text-center">
+                          <Boxes className="h-8 w-8 text-violet-500 mx-auto mb-2" />
+                          <p className="text-2xl font-bold">{importedData.items}</p>
+                          <p className="text-xs text-muted-foreground">Itens</p>
+                        </div>
+                      </div>
+                      {importedData.cycle && (
+                        <p className="text-center text-sm text-muted-foreground mt-4">
+                          Ciclo: {importedData.cycle}
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => { setImportedData(null); setFileName(''); }}
+                    >
+                      Importar Outro
+                    </Button>
+                    <Button
+                      className="flex-1 bg-green-500 hover:bg-green-600"
+                      onClick={handleCreateFromImport}
+                      disabled={creating}
+                    >
+                      {creating ? 'Criando...' : 'Criar Pedido'}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </TabsContent>
+
+            <TabsContent value="manual" className="space-y-4 pt-4">
+              <div className="space-y-2">
+                <Label>Codigo do Pedido</Label>
+                <Input
+                  placeholder="Ex: 123456789"
+                  value={orderCode}
+                  onChange={(e) => setOrderCode(e.target.value)}
+                  className="font-mono"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Quantidade de Itens</Label>
+                <Input
+                  type="number"
+                  placeholder="Ex: 5"
+                  min={1}
+                  value={items}
+                  onChange={(e) => setItems(e.target.value)}
+                />
+              </div>
+
+              <div className="flex gap-2 pt-4">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setShowCreate(false)}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  className="flex-1 bg-green-500 hover:bg-green-600"
+                  onClick={handleCreate}
+                  disabled={creating}
+                >
+                  {creating ? 'Criando...' : 'Criar Pedido'}
+                </Button>
+              </div>
+            </TabsContent>
+          </Tabs>
         </DialogContent>
       </Dialog>
     </div>
