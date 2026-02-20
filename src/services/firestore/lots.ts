@@ -11,12 +11,65 @@ import {
   Timestamp,
   runTransaction,
   writeBatch,
+  collectionGroup,
 } from 'firebase/firestore';
 import { getFirebaseDb } from '@/lib/firebase';
 import type { Lot, LotOrder, LotStatus, LotWorkMode, LotAssignmentType, ParsedOrder } from '@/types';
 import { incrementUserXp, updateUserStreak } from './users';
 import { getPickingRules } from './pickingRules';
 import { calculateLotXp } from '@/lib/xp';
+
+// ==================== FUNCOES DE VALIDACAO ====================
+
+// Verifica se um codigo de lote ja existe
+export async function checkLotCodeExists(lotCode: string): Promise<boolean> {
+  const lotRef = doc(getFirebaseDb(), 'lots', lotCode);
+  const snap = await getDoc(lotRef);
+  return snap.exists();
+}
+
+// Verifica se um codigo de pedido ja existe em qualquer lote
+export async function checkOrderCodeExists(orderCode: string): Promise<{ exists: boolean; lotCode?: string }> {
+  // Buscar em todos os lotes
+  const ordersQuery = query(
+    collectionGroup(getFirebaseDb(), 'orders'),
+    where('orderCode', '==', orderCode),
+  );
+  const snap = await getDocs(ordersQuery);
+
+  if (!snap.empty) {
+    const firstDoc = snap.docs[0];
+    const lotId = firstDoc.ref.parent.parent?.id;
+    return { exists: true, lotCode: lotId };
+  }
+
+  // Buscar em pedidos avulsos
+  const singleOrdersQuery = query(
+    collection(getFirebaseDb(), 'singleOrders'),
+    where('orderCode', '==', orderCode),
+  );
+  const singleSnap = await getDocs(singleOrdersQuery);
+
+  if (!singleSnap.empty) {
+    return { exists: true, lotCode: 'Pedido Avulso' };
+  }
+
+  return { exists: false };
+}
+
+// Verifica multiplos codigos de pedido de uma vez
+export async function checkMultipleOrderCodesExist(orderCodes: string[]): Promise<{ code: string; lotCode: string }[]> {
+  const duplicates: { code: string; lotCode: string }[] = [];
+
+  for (const code of orderCodes) {
+    const result = await checkOrderCodeExists(code);
+    if (result.exists && result.lotCode) {
+      duplicates.push({ code, lotCode: result.lotCode });
+    }
+  }
+
+  return duplicates;
+}
 
 export async function createLot(
   lotCode: string,
@@ -25,6 +78,20 @@ export async function createLot(
   createdByName: string,
   workMode: LotWorkMode = 'GERAL',
 ): Promise<string> {
+  // Validar se o codigo do lote ja existe
+  const lotExists = await checkLotCodeExists(lotCode);
+  if (lotExists) {
+    throw new Error(`O lote ${lotCode} ja existe no sistema.`);
+  }
+
+  // Validar se algum codigo de pedido ja existe
+  const orderCodes = orders.map((o) => o.orderCode);
+  const duplicateOrders = await checkMultipleOrderCodesExist(orderCodes);
+  if (duplicateOrders.length > 0) {
+    const firstDup = duplicateOrders[0];
+    throw new Error(`O pedido ${firstDup.code} ja existe no ${firstDup.lotCode}.`);
+  }
+
   const lotId = lotCode;
   const now = Timestamp.now();
 
@@ -325,6 +392,20 @@ export async function createAdminLot(
   createdByName: string,
   assignment: AdminLotAssignment,
 ): Promise<string> {
+  // Validar se o codigo do lote ja existe
+  const lotExists = await checkLotCodeExists(lotCode);
+  if (lotExists) {
+    throw new Error(`O lote ${lotCode} ja existe no sistema.`);
+  }
+
+  // Validar se algum codigo de pedido ja existe
+  const orderCodes = orders.map((o) => o.orderCode);
+  const duplicateOrders = await checkMultipleOrderCodesExist(orderCodes);
+  if (duplicateOrders.length > 0) {
+    const firstDup = duplicateOrders[0];
+    throw new Error(`O pedido ${firstDup.code} ja existe no ${firstDup.lotCode}.`);
+  }
+
   const lotId = lotCode;
   const now = Timestamp.now();
 

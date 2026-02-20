@@ -14,6 +14,7 @@ import { getFirebaseDb } from '@/lib/firebase';
 import type { SingleOrder, SingleOrderStatus } from '@/types';
 import { incrementUserXp, updateUserStreak } from './users';
 import { getPickingRules } from './pickingRules';
+import { checkOrderCodeExists } from './lots';
 
 // Gera um ID unico para o pedido avulso
 function generateSingleOrderId(): string {
@@ -27,6 +28,12 @@ export async function createSingleOrder(
   createdByUid: string,
   createdByName: string,
 ): Promise<string> {
+  // Validar se o codigo do pedido ja existe
+  const orderExists = await checkOrderCodeExists(orderCode);
+  if (orderExists.exists) {
+    throw new Error(`O pedido ${orderCode} ja existe no ${orderExists.lotCode}.`);
+  }
+
   const id = generateSingleOrderId();
   const now = Timestamp.now();
 
