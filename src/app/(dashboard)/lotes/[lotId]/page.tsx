@@ -287,7 +287,14 @@ export default function LotDetailPage() {
 
   const nextPendingOrder = orders.find((o) => o.status === 'PENDING');
   const isScanningStarted = !!lot.scanStartAt;
+
+  // Verificar se o usuario pode trabalhar neste lote
+  // Admin pode trabalhar se estiver atribuido ou se criou o lote
   const isAdmin = user?.role === 'ADMIN';
+  const canWorkOnLot = !isAdmin ||
+    lot.assignedGeneralUid === user?.uid ||
+    lot.createdByUid === user?.uid ||
+    !lot.isAdminCreated;
 
   return (
     <div className="space-y-6">
@@ -398,8 +405,8 @@ export default function LotDetailPage() {
         </Card>
       )}
 
-      {/* Actions (hidden for admin - read only) */}
-      {!isAdmin && lot.status === 'DRAFT' && (
+      {/* Actions */}
+      {canWorkOnLot && lot.status === 'DRAFT' && (
         <Card>
           <CardContent className="flex items-center justify-between pt-6">
             <div>
@@ -416,7 +423,7 @@ export default function LotDetailPage() {
         </Card>
       )}
 
-      {!isAdmin && lot.status === 'IN_PROGRESS' && (
+      {canWorkOnLot && lot.status === 'IN_PROGRESS' && (
         <Card>
           <CardContent className="flex items-center justify-between pt-6">
             <div>
@@ -439,7 +446,7 @@ export default function LotDetailPage() {
       )}
 
       {/* Bipar Pedido Agora? Button */}
-      {!isAdmin && lot.status === 'CLOSING' && !isScanningStarted && (
+      {canWorkOnLot && lot.status === 'CLOSING' && !isScanningStarted && (
         <Card className="border-amber-500/30 bg-amber-500/5">
           <CardContent className="flex flex-col items-center justify-center pt-6 pb-6 gap-4">
             <ScanLine className="h-12 w-12 text-amber-500" />
@@ -463,7 +470,7 @@ export default function LotDetailPage() {
       )}
 
       {/* Seal Orders */}
-      {!isAdmin && lot.status === 'CLOSING' && isScanningStarted && (
+      {canWorkOnLot && lot.status === 'CLOSING' && isScanningStarted && (
         <Card className="border-amber-500/30">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
