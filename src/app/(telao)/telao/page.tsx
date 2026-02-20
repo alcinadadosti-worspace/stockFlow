@@ -14,6 +14,7 @@ import {
   Medal,
   RefreshCw,
   Crown,
+  ClipboardList,
 } from 'lucide-react';
 
 const REFRESH_INTERVAL = 30000; // 30 seconds
@@ -28,6 +29,7 @@ function getTodayRange(): { start: Date; end: Date } {
 interface TodayStats {
   xpTotal: number;
   lotsCompleted: number;
+  ordersCompleted: number;
   itemsSeparated: number;
 }
 
@@ -97,11 +99,13 @@ export default function TelaoPage() {
   const todayStats: TodayStats = useMemo(() => {
     const xpTasks = todayTaskLogs.reduce((sum, t) => sum + t.xp, 0);
     const xpPicking = todayLots.reduce((sum, l) => sum + (l.xpEarned || 0), 0);
+    const ordersCompleted = todayLots.reduce((sum, l) => sum + (l.totals?.orders || 0), 0);
     const itemsSeparated = todayLots.reduce((sum, l) => sum + (l.totals?.items || 0), 0);
 
     return {
       xpTotal: xpTasks + xpPicking,
       lotsCompleted: todayLots.length,
+      ordersCompleted,
       itemsSeparated,
     };
   }, [todayTaskLogs, todayLots]);
@@ -111,10 +115,35 @@ export default function TelaoPage() {
 
     return estoquistas.map((u) => {
       const userTaskLogs = todayTaskLogs.filter((l) => l.uid === u.uid);
-      const userLots = todayLots.filter((l) => l.createdByUid === u.uid);
+
+      // Lotes onde o usuario participou (criou, separou ou bipou)
+      const userLots = todayLots.filter((l) =>
+        l.createdByUid === u.uid ||
+        l.separatorUid === u.uid ||
+        l.scannerUid === u.uid ||
+        l.assignedGeneralUid === u.uid
+      );
+
+      // Calcular XP considerando funcoes separadas
+      let xpPicking = 0;
+      for (const l of userLots) {
+        if (l.separatorUid === u.uid && l.separatorXpEarned) {
+          // Usuario foi o separador
+          xpPicking += l.separatorXpEarned;
+        } else if (l.scannerUid === u.uid && l.scannerXpEarned) {
+          // Usuario foi o bipador
+          xpPicking += l.scannerXpEarned;
+        } else if (l.createdByUid === u.uid || l.assignedGeneralUid === u.uid) {
+          // Usuario fez tudo (funcao geral)
+          xpPicking += l.xpEarned || 0;
+        }
+      }
+
       const xpTasks = userTaskLogs.reduce((sum, l) => sum + l.xp, 0);
-      const xpPicking = userLots.reduce((sum, l) => sum + (l.xpEarned || 0), 0);
       const totalXp = xpTasks + xpPicking;
+
+      // Contar lotes unicos (evitar duplicatas se usuario fez separacao e bipagem)
+      const uniqueLotIds = new Set(userLots.map(l => l.id));
       const totalOrders = userLots.reduce((sum, l) => sum + (l.totals?.orders || 0), 0);
       const totalItems = userLots.reduce((sum, l) => sum + (l.totals?.items || 0), 0);
 
@@ -123,7 +152,7 @@ export default function TelaoPage() {
         name: u.name,
         xp: totalXp,
         level: calculateLevel(u.xpTotal || 0),
-        lots: userLots.length,
+        lots: uniqueLotIds.size,
         orders: totalOrders,
         items: totalItems,
       };
@@ -179,7 +208,7 @@ export default function TelaoPage() {
       {/* Main Content */}
       <div className="flex-1 grid grid-cols-3 gap-8">
         {/* Left Column - Metrics */}
-        <div className="col-span-2 grid grid-rows-3 gap-6">
+        <div className="col-span-2 grid grid-cols-2 grid-rows-2 gap-6">
           {/* XP Total */}
           <MetricCard
             icon={Zap}
@@ -198,6 +227,16 @@ export default function TelaoPage() {
             label="Lotes Concluidos"
             value={todayStats.lotsCompleted.toString()}
             suffix="lotes"
+          />
+
+          {/* Pedidos Concluidos */}
+          <MetricCard
+            icon={ClipboardList}
+            iconColor="text-violet-400"
+            iconBg="bg-violet-500/20"
+            label="Pedidos Concluidos"
+            value={todayStats.ordersCompleted.toLocaleString('pt-BR')}
+            suffix="pedidos"
           />
 
           {/* Itens Separados */}
