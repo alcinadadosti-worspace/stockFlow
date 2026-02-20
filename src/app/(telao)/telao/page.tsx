@@ -303,14 +303,17 @@ function RankingItem({ position, name, xp, level, lots, orders, items }: Ranking
   const Icon = style.icon;
 
   return (
-    <div className={`flex items-center gap-4 p-4 rounded-xl ${style.bg} transition-all`}>
-      <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-2xl ${style.text}`}>
-        {Icon ? <Icon className="h-7 w-7" /> : position}
+    <div className={`flex items-center gap-4 p-5 rounded-xl ${style.bg} transition-all`}>
+      <div className={`w-14 h-14 rounded-full flex items-center justify-center font-bold text-3xl ${style.text}`}>
+        {Icon ? <Icon className="h-8 w-8" /> : position}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-lg font-semibold text-white truncate">{name}</p>
-        <div className="flex items-center gap-3 text-xs text-slate-400 mt-1">
-          <span>{lots} lotes</span>
+        <p className="text-xl font-semibold text-white truncate">{name}</p>
+        <div className="flex items-center gap-4 text-base text-slate-300 mt-2 font-medium">
+          <span className="flex items-center gap-1">
+            <Package className="h-4 w-4 text-blue-400" />
+            {lots} lotes
+          </span>
           <span className="text-slate-600">|</span>
           <span>{orders} pedidos</span>
           <span className="text-slate-600">|</span>
@@ -318,8 +321,8 @@ function RankingItem({ position, name, xp, level, lots, orders, items }: Ranking
         </div>
       </div>
       <div className="text-right">
-        <p className={`text-2xl font-bold ${style.text}`}>{xp.toLocaleString('pt-BR')}</p>
-        <p className="text-xs text-slate-400">XP</p>
+        <p className={`text-3xl font-bold ${style.text}`}>{xp.toLocaleString('pt-BR')}</p>
+        <p className="text-sm text-slate-400">XP</p>
       </div>
     </div>
   );
