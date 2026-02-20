@@ -111,50 +111,54 @@ export default function TelaoPage() {
   }, [todayTaskLogs, todayLots]);
 
   const topUsers: TopUser[] = useMemo(() => {
-    const estoquistas = users.filter((u) => u.role === 'ESTOQUISTA');
-
-    return estoquistas.map((u) => {
+    // Incluir todos os usuarios (admin e estoquista)
+    return users.map((u) => {
       const userTaskLogs = todayTaskLogs.filter((l) => l.uid === u.uid);
 
-      // Lotes onde o usuario participou (criou, separou ou bipou)
-      const userLots = todayLots.filter((l) =>
-        l.createdByUid === u.uid ||
-        l.separatorUid === u.uid ||
-        l.scannerUid === u.uid ||
-        l.assignedGeneralUid === u.uid
-      );
-
-      // Calcular XP considerando funcoes separadas
+      // Calcular XP de lotes considerando funcoes separadas
       let xpPicking = 0;
-      for (const l of userLots) {
-        if (l.separatorUid === u.uid && l.separatorXpEarned) {
-          // Usuario foi o separador
+      let lotsCount = 0;
+      let ordersCount = 0;
+      let itemsCount = 0;
+
+      for (const l of todayLots) {
+        const isSeparator = l.separatorUid === u.uid;
+        const isScanner = l.scannerUid === u.uid && l.scannerUid !== l.separatorUid;
+        const isCreator = l.createdByUid === u.uid && !l.separatorUid && !l.scannerUid;
+        const isAssignedGeneral = l.assignedGeneralUid === u.uid && l.separatorUid === u.uid;
+
+        // XP: cada um recebe sua parte
+        if (isSeparator && l.separatorXpEarned) {
           xpPicking += l.separatorXpEarned;
-        } else if (l.scannerUid === u.uid && l.scannerXpEarned) {
-          // Usuario foi o bipador
+        } else if (isScanner && l.scannerXpEarned) {
           xpPicking += l.scannerXpEarned;
-        } else if (l.createdByUid === u.uid || l.assignedGeneralUid === u.uid) {
-          // Usuario fez tudo (funcao geral)
-          xpPicking += l.xpEarned || 0;
+        } else if ((isCreator || isAssignedGeneral) && l.xpEarned) {
+          xpPicking += l.xpEarned;
+        }
+
+        // Lotes, Pedidos, Itens: contar apenas para o trabalhador PRINCIPAL
+        // Isso evita duplicacao quando separador e bipador sao diferentes
+        // O bipador recebe XP mas nao conta para estatisticas de lotes/pedidos/itens
+        const isPrimaryWorker = isSeparator || isCreator || isAssignedGeneral;
+
+        if (isPrimaryWorker) {
+          lotsCount++;
+          ordersCount += l.totals?.orders || 0;
+          itemsCount += l.totals?.items || 0;
         }
       }
 
       const xpTasks = userTaskLogs.reduce((sum, l) => sum + l.xp, 0);
       const totalXp = xpTasks + xpPicking;
 
-      // Contar lotes unicos (evitar duplicatas se usuario fez separacao e bipagem)
-      const uniqueLotIds = new Set(userLots.map(l => l.id));
-      const totalOrders = userLots.reduce((sum, l) => sum + (l.totals?.orders || 0), 0);
-      const totalItems = userLots.reduce((sum, l) => sum + (l.totals?.items || 0), 0);
-
       return {
         uid: u.uid,
         name: u.name,
         xp: totalXp,
         level: calculateLevel(u.xpTotal || 0),
-        lots: uniqueLotIds.size,
-        orders: totalOrders,
-        items: totalItems,
+        lots: lotsCount,
+        orders: ordersCount,
+        items: itemsCount,
       };
     })
     .filter((u) => u.xp > 0)
