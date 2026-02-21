@@ -255,6 +255,11 @@ export async function claimLotForScanning(
     throw new Error('Este lote ainda nao esta pronto para bipagem. Aguarde o separador finalizar.');
   }
 
+  // Se o lote tem bipador atribuido, validar
+  if (lot.assignmentType === 'ASSIGNED_SEPARATED' && lot.assignedScannerUid && lot.assignedScannerUid !== scannerUid) {
+    throw new Error('Este lote foi atribuido a outro bipador.');
+  }
+
   await updateDoc(doc(getFirebaseDb(), 'lots', lotId), {
     status: 'CLOSING' as LotStatus,
     scannerUid,
@@ -565,6 +570,20 @@ export async function getAssignedLotsScanner(uid: string): Promise<Lot[]> {
 
 // Inicia lote atribuido (marca quem esta executando)
 export async function startAssignedLot(lotId: string, executorUid: string, executorName: string): Promise<void> {
+  // Verificar se o usuario pode iniciar este lote
+  const lot = await getLot(lotId);
+  if (!lot) {
+    throw new Error('Lote nao encontrado.');
+  }
+
+  // Se o lote tem atribuicao especifica, validar
+  if (lot.assignmentType === 'ASSIGNED_GENERAL' && lot.assignedGeneralUid !== executorUid) {
+    throw new Error('Este lote foi atribuido a outro usuario.');
+  }
+  if (lot.assignmentType === 'ASSIGNED_SEPARATED' && lot.assignedSeparatorUid !== executorUid) {
+    throw new Error('Este lote foi atribuido a outro separador.');
+  }
+
   await updateDoc(doc(getFirebaseDb(), 'lots', lotId), {
     status: 'IN_PROGRESS' as LotStatus,
     startAt: Timestamp.now(),
@@ -582,6 +601,11 @@ export async function startAssignedScanning(lotId: string, scannerUid: string, s
   }
   if (lot.status !== 'READY_FOR_SCAN') {
     throw new Error('Este lote ainda nao esta pronto para bipagem. Aguarde o separador finalizar.');
+  }
+
+  // Se o lote tem bipador atribuido, validar
+  if (lot.assignmentType === 'ASSIGNED_SEPARATED' && lot.assignedScannerUid && lot.assignedScannerUid !== scannerUid) {
+    throw new Error('Este lote foi atribuido a outro bipador.');
   }
 
   await updateDoc(doc(getFirebaseDb(), 'lots', lotId), {

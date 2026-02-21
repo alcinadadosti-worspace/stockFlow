@@ -288,13 +288,32 @@ export default function LotDetailPage() {
   const nextPendingOrder = orders.find((o) => o.status === 'PENDING');
   const isScanningStarted = !!lot.scanStartAt;
 
-  // Verificar se o usuario pode trabalhar neste lote
-  // Admin pode trabalhar se estiver atribuido ou se criou o lote
-  const isAdmin = user?.role === 'ADMIN';
-  const canWorkOnLot = !isAdmin ||
-    lot.assignedGeneralUid === user?.uid ||
-    lot.createdByUid === user?.uid ||
-    !lot.isAdminCreated;
+  // Verificar se o usuario pode trabalhar neste lote baseado na atribuicao
+  const canWorkOnLot = (() => {
+    // Se nao tem atribuicao especifica (OPEN ou undefined), qualquer um pode
+    if (!lot.assignmentType || lot.assignmentType === 'OPEN') {
+      return true;
+    }
+
+    // Se tem atribuicao geral, apenas o usuario atribuido pode
+    if (lot.assignmentType === 'ASSIGNED_GENERAL') {
+      return lot.assignedGeneralUid === user?.uid;
+    }
+
+    // Se tem atribuicao separada, depende da fase do lote
+    if (lot.assignmentType === 'ASSIGNED_SEPARATED') {
+      // Fase de separacao (DRAFT, IN_PROGRESS): apenas separador atribuido
+      if (lot.status === 'DRAFT' || lot.status === 'IN_PROGRESS') {
+        return lot.assignedSeparatorUid === user?.uid;
+      }
+      // Fase de bipagem (READY_FOR_SCAN, CLOSING): apenas bipador atribuido
+      if (lot.status === 'READY_FOR_SCAN' || lot.status === 'CLOSING') {
+        return lot.assignedScannerUid === user?.uid;
+      }
+    }
+
+    return false;
+  })();
 
   return (
     <div className="space-y-6">
