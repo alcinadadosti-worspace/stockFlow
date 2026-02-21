@@ -20,7 +20,8 @@
       "Bash(git push:*)",
       "Bash(find:*)",
       "Bash(ls:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(if exist .next rmdir /s /q .next)"
     ]
   }
 }

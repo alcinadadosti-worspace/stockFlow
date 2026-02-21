@@ -231,11 +231,19 @@ export async function deleteLot(lotId: string): Promise<void> {
   }
 }
 
-export async function startLot(lotId: string): Promise<void> {
-  await updateDoc(doc(getFirebaseDb(), 'lots', lotId), {
+export async function startLot(lotId: string, executorUid?: string, executorName?: string): Promise<void> {
+  const updateData: Record<string, unknown> = {
     status: 'IN_PROGRESS' as LotStatus,
     startAt: Timestamp.now(),
-  });
+  };
+
+  // Se tiver executor, atualiza quem esta fazendo o lote
+  if (executorUid && executorName) {
+    updateData.separatorUid = executorUid;
+    updateData.separatorName = executorName;
+  }
+
+  await updateDoc(doc(getFirebaseDb(), 'lots', lotId), updateData);
 }
 
 export async function closeLot(lotId: string): Promise<void> {
@@ -582,6 +590,23 @@ export async function getAssignedLotsScanner(uid: string): Promise<Lot[]> {
   const q = query(
     collection(getFirebaseDb(), 'lots'),
     where('assignedScannerUid', '==', uid),
+  );
+  const snap = await getDocs(q);
+  const lots = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Lot);
+  return lots.sort((a, b) => {
+    const aTime = a.createdAt?.toMillis() || 0;
+    const bTime = b.createdAt?.toMillis() || 0;
+    return bTime - aTime;
+  });
+}
+
+// Busca lotes abertos criados por admin (qualquer estoquista pode pegar)
+export async function getOpenAdminLots(): Promise<Lot[]> {
+  const q = query(
+    collection(getFirebaseDb(), 'lots'),
+    where('isAdminCreated', '==', true),
+    where('assignmentType', '==', 'OPEN'),
+    where('status', '==', 'DRAFT'),
   );
   const snap = await getDocs(q);
   const lots = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Lot);

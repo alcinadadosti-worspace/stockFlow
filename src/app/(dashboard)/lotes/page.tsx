@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
-import { getAllLots, getLotsByUser, getAssignedLotsGeneral } from '@/services/firestore/lots';
+import { getAllLots, getLotsByUser, getAssignedLotsGeneral, getOpenAdminLots } from '@/services/firestore/lots';
 import type { Lot } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -54,14 +54,20 @@ export default function LotesPage() {
         const data = await getAllLots();
         setLots(data);
       } else {
-        // Buscar lotes criados pelo usuario + lotes atribuidos a ele (funcao geral)
-        const [ownLots, assignedLots] = await Promise.all([
+        // Buscar lotes criados pelo usuario + lotes atribuidos a ele + lotes abertos
+        const [ownLots, assignedLots, openLots] = await Promise.all([
           getLotsByUser(user.uid),
           getAssignedLotsGeneral(user.uid),
+          getOpenAdminLots(),
         ]);
         // Combinar e remover duplicatas
         const allLots = [...ownLots];
         for (const lot of assignedLots) {
+          if (!allLots.find((l) => l.id === lot.id)) {
+            allLots.push(lot);
+          }
+        }
+        for (const lot of openLots) {
           if (!allLots.find((l) => l.id === lot.id)) {
             allLots.push(lot);
           }
@@ -186,7 +192,12 @@ export default function LotesPage() {
                       {lot.isAdminCreated && lot.assignedGeneralUid === user?.uid && (
                         <Badge variant="outline" className="text-violet-500 border-violet-500/30 gap-1">
                           <Star className="h-3 w-3" />
-                          Atribuido
+                          Atribuído
+                        </Badge>
+                      )}
+                      {lot.isAdminCreated && lot.assignmentType === 'OPEN' && lot.status === 'DRAFT' && (
+                        <Badge variant="outline" className="text-emerald-500 border-emerald-500/30 gap-1">
+                          Disponível
                         </Badge>
                       )}
                     </div>

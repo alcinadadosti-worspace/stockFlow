@@ -147,9 +147,10 @@ export default function LotDetailPage() {
   }, [lot?.status, lot?.scanStartAt, selectedOrderId]);
 
   async function handleStart() {
+    if (!user) return;
     setActionLoading(true);
     try {
-      await startLot(lotId);
+      await startLot(lotId, user.uid, user.name);
       playSound('lot-started');
       toast.success('Lote iniciado! Bom trabalho!');
       await loadData();
