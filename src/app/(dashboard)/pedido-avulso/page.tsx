@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
-import { getSingleOrdersByUser, createSingleOrder } from '@/services/firestore/singleOrders';
+import { getSingleOrdersByUser, createSingleOrder, deleteSingleOrder } from '@/services/firestore/singleOrders';
 import { parseSingleOrderSpreadsheet } from '@/lib/spreadsheet';
 import type { SingleOrder } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -34,6 +34,7 @@ import {
   FileSpreadsheet,
   AlertCircle,
   Boxes,
+  Trash2,
 } from 'lucide-react';
 import { formatDateTimeBR, formatDuration } from '@/lib/utils';
 import { cn } from '@/lib/utils';
@@ -84,6 +85,7 @@ export default function PedidoAvulsoPage() {
   const [importedData, setImportedData] = useState<{ orderCode: string; items: number; cycle?: string } | null>(null);
   const [importErrors, setImportErrors] = useState<string[]>([]);
   const [fileName, setFileName] = useState('');
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     if (!user) return;
@@ -186,6 +188,24 @@ export default function PedidoAvulsoPage() {
       toast.error(message);
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function handleDelete(orderId: string, orderCode: string) {
+    if (!confirm(`Tem certeza que deseja apagar o pedido ${orderCode}? Esta acao nao pode ser desfeita.`)) {
+      return;
+    }
+
+    setDeleting(orderId);
+    try {
+      await deleteSingleOrder(orderId);
+      toast.success(`Pedido ${orderCode} apagado!`);
+      loadData();
+    } catch (err) {
+      toast.error('Erro ao apagar pedido');
+      console.error(err);
+    } finally {
+      setDeleting(null);
     }
   }
 
@@ -308,6 +328,22 @@ export default function PedidoAvulsoPage() {
                       </Badge>
                     )}
                   </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDelete(order.id, order.orderCode);
+                    }}
+                    disabled={deleting === order.id}
+                  >
+                    {deleting === order.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4" />
+                    )}
+                  </Button>
                 </div>
               ))}
             </div>

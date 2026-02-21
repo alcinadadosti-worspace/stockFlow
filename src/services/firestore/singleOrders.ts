@@ -3,12 +3,14 @@ import {
   getDoc,
   setDoc,
   updateDoc,
+  deleteDoc,
   collection,
   getDocs,
   query,
   where,
   Timestamp,
   runTransaction,
+  writeBatch,
 } from 'firebase/firestore';
 import { getFirebaseDb } from '@/lib/firebase';
 import type { SingleOrder, SingleOrderStatus } from '@/types';
@@ -206,4 +208,23 @@ export async function sealSingleOrder(
     const message = error instanceof Error ? error.message : 'Erro ao encerrar pedido.';
     return { success: false, error: message };
   }
+}
+
+// Apaga um pedido avulso e seu lacre associado
+export async function deleteSingleOrder(id: string): Promise<void> {
+  const order = await getSingleOrder(id);
+  if (!order) return;
+
+  const batch = writeBatch(getFirebaseDb());
+
+  // Se tem lacre, deletar da colecao global
+  if (order.sealedCode) {
+    const sealRef = doc(getFirebaseDb(), 'sealedCodes', order.sealedCode);
+    batch.delete(sealRef);
+  }
+
+  // Deletar o pedido avulso
+  batch.delete(doc(getFirebaseDb(), 'singleOrders', id));
+
+  await batch.commit();
 }
