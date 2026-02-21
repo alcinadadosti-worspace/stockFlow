@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
-import { getAllLots, createAdminLot } from '@/services/firestore/lots';
+import { getAllLots, createAdminLot, deleteLot } from '@/services/firestore/lots';
 import { getAllUsers } from '@/services/firestore/users';
 import { parseSpreadsheet } from '@/lib/spreadsheet';
 import type { Lot, AppUser, ParsedOrder, LotAssignmentType } from '@/types';
@@ -43,6 +43,7 @@ import {
   User,
   Layers,
   ScanLine,
+  Trash2,
 } from 'lucide-react';
 import { formatDateTimeBR, formatDuration } from '@/lib/utils';
 import { LOT_STATUS_LABELS } from '@/lib/constants';
@@ -91,6 +92,7 @@ export default function AdminLotesPage() {
   const [assignedSeparatorUid, setAssignedSeparatorUid] = useState('');
   const [assignedScannerUid, setAssignedScannerUid] = useState('');
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -212,6 +214,24 @@ export default function AdminLotesPage() {
       setStep('config');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleDelete(lotId: string, lotCode: string) {
+    if (!confirm(`Tem certeza que deseja apagar o lote ${lotCode}? Esta acao nao pode ser desfeita.`)) {
+      return;
+    }
+
+    setDeleting(lotId);
+    try {
+      await deleteLot(lotId);
+      toast.success(`Lote ${lotCode} apagado!`);
+      loadData();
+    } catch (err) {
+      toast.error('Erro ao apagar lote');
+      console.error(err);
+    } finally {
+      setDeleting(null);
     }
   }
 
@@ -349,6 +369,22 @@ export default function AdminLotesPage() {
                       </Badge>
                     )}
                   </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDelete(lot.id, lot.lotCode);
+                    }}
+                    disabled={deleting === lot.id}
+                  >
+                    {deleting === lot.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4" />
+                    )}
+                  </Button>
                 </div>
               ))}
             </div>

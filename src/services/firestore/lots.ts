@@ -3,6 +3,7 @@ import {
   getDoc,
   setDoc,
   updateDoc,
+  deleteDoc,
   collection,
   getDocs,
   query,
@@ -180,6 +181,30 @@ export async function getLotOrders(lotId: string): Promise<LotOrder[]> {
   );
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as LotOrder);
+}
+
+// Apaga um lote e todos os seus pedidos e lacres associados
+export async function deleteLot(lotId: string): Promise<void> {
+  const batch = writeBatch(getFirebaseDb());
+
+  // Buscar todos os pedidos do lote
+  const ordersSnap = await getDocs(collection(getFirebaseDb(), 'lots', lotId, 'orders'));
+
+  // Deletar lacres associados aos pedidos
+  for (const orderDoc of ordersSnap.docs) {
+    const orderData = orderDoc.data();
+    if (orderData.sealedCode) {
+      const sealRef = doc(getFirebaseDb(), 'sealedCodes', orderData.sealedCode);
+      batch.delete(sealRef);
+    }
+    // Deletar o pedido
+    batch.delete(orderDoc.ref);
+  }
+
+  // Deletar o lote
+  batch.delete(doc(getFirebaseDb(), 'lots', lotId));
+
+  await batch.commit();
 }
 
 export async function startLot(lotId: string): Promise<void> {
