@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { useSound } from '@/hooks/useSound';
 import {
   getLot,
   getLotOrders,
@@ -94,6 +95,7 @@ export default function LotDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { user } = useAuth();
+  const { playSound } = useSound();
   const lotId = params.lotId as string;
 
   const [lot, setLot] = useState<Lot | null>(null);
@@ -148,9 +150,11 @@ export default function LotDetailPage() {
     setActionLoading(true);
     try {
       await startLot(lotId);
+      playSound('lot-started');
       toast.success('Lote iniciado! Bom trabalho!');
       await loadData();
     } catch (err) {
+      playSound('error');
       toast.error('Erro ao iniciar lote');
     } finally {
       setActionLoading(false);
@@ -161,9 +165,11 @@ export default function LotDetailPage() {
     setActionLoading(true);
     try {
       await closeLot(lotId);
+      playSound('success');
       toast.success('Lote fechado! Agora encerre os pedidos.');
       await loadData();
     } catch (err) {
+      playSound('error');
       toast.error('Erro ao fechar lote');
     } finally {
       setActionLoading(false);
@@ -174,9 +180,11 @@ export default function LotDetailPage() {
     setActionLoading(true);
     try {
       await startScanning(lotId);
+      playSound('scan-start');
       toast.success('Bipagem iniciada! Bipe os pedidos.');
       await loadData();
     } catch (err) {
+      playSound('error');
       toast.error('Erro ao iniciar bipagem');
     } finally {
       setActionLoading(false);
@@ -201,7 +209,7 @@ export default function LotDetailPage() {
       const result = await sealOrder(lotId, selectedOrderId, code);
       if (!result.success) {
         setSealError(result.error || 'Erro ao encerrar pedido.');
-        try { new Audio('/error.mp3').play().catch(() => {}); } catch {}
+        playSound('error');
         return;
       }
 
@@ -209,7 +217,7 @@ export default function LotDetailPage() {
         description: `Lacre ${code} aplicado.`,
       });
 
-      try { new Audio('/success.mp3').play().catch(() => {}); } catch {}
+      playSound('success');
 
       setSealInput('');
       await loadData();
@@ -218,16 +226,18 @@ export default function LotDetailPage() {
       const allSealed = await checkAllOrdersSealed(lotId);
       if (allSealed) {
         await completeLot(lotId);
+        playSound('lot-finished');
         toast.success('Lote concluído! Parabéns!');
         confetti({
-          particleCount: 100,
-          spread: 70,
+          particleCount: 150,
+          spread: 90,
           origin: { y: 0.6 },
           colors: ['#FFD700', '#FFA500', '#FF6347'],
         });
         await loadData();
       }
     } catch (err) {
+      playSound('error');
       toast.error('Erro ao encerrar pedido');
     } finally {
       setActionLoading(false);

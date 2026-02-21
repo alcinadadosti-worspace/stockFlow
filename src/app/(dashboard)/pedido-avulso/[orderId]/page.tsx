@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { useSound } from '@/hooks/useSound';
 import {
   getSingleOrder,
   startSingleOrderSeparation,
@@ -95,6 +96,7 @@ export default function PedidoAvulsoDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { user } = useAuth();
+  const { playSound } = useSound();
   const orderId = params.orderId as string;
 
   const [order, setOrder] = useState<SingleOrder | null>(null);
@@ -134,9 +136,11 @@ export default function PedidoAvulsoDetailPage() {
     setActionLoading(true);
     try {
       await startSingleOrderSeparation(orderId);
+      playSound('lot-started');
       toast.success('Separacao iniciada! Bom trabalho!');
       await loadData();
     } catch (err) {
+      playSound('error');
       toast.error('Erro ao iniciar separacao');
     } finally {
       setActionLoading(false);
@@ -147,9 +151,11 @@ export default function PedidoAvulsoDetailPage() {
     setActionLoading(true);
     try {
       await endSingleOrderSeparation(orderId);
+      playSound('success');
       toast.success('Separacao finalizada! Agora bipe o pedido.');
       await loadData();
     } catch (err) {
+      playSound('error');
       toast.error('Erro ao finalizar separacao');
     } finally {
       setActionLoading(false);
@@ -160,9 +166,11 @@ export default function PedidoAvulsoDetailPage() {
     setActionLoading(true);
     try {
       await startSingleOrderScanning(orderId);
+      playSound('scan-start');
       toast.success('Bipagem iniciada!');
       await loadData();
     } catch (err) {
+      playSound('error');
       toast.error('Erro ao iniciar bipagem');
     } finally {
       setActionLoading(false);
@@ -182,22 +190,23 @@ export default function PedidoAvulsoDetailPage() {
       const result = await sealSingleOrder(orderId, code);
       if (!result.success) {
         setSealError(result.error || 'Erro ao encerrar pedido.');
-        try { new Audio('/error.mp3').play().catch(() => {}); } catch {}
+        playSound('error');
         return;
       }
 
+      playSound('lot-finished');
       toast.success('Pedido concluido! Parabens!');
-      try { new Audio('/success.mp3').play().catch(() => {}); } catch {}
 
       confetti({
-        particleCount: 100,
-        spread: 70,
+        particleCount: 120,
+        spread: 80,
         origin: { y: 0.6 },
         colors: ['#22C55E', '#10B981', '#34D399'],
       });
 
       await loadData();
     } catch (err) {
+      playSound('error');
       toast.error('Erro ao encerrar pedido');
     } finally {
       setActionLoading(false);

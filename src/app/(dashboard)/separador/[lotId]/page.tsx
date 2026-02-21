@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { useSound } from '@/hooks/useSound';
 import {
   getLot,
   getLotOrders,
@@ -79,6 +80,7 @@ export default function SeparadorLotDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { user } = useAuth();
+  const { playSound } = useSound();
   const lotId = params.lotId as string;
 
   const [lot, setLot] = useState<Lot | null>(null);
@@ -111,9 +113,11 @@ export default function SeparadorLotDetailPage() {
     setActionLoading(true);
     try {
       await startLot(lotId);
+      playSound('lot-started');
       toast.success('Separacao iniciada! Bom trabalho!');
       await loadData();
     } catch (err) {
+      playSound('error');
       toast.error('Erro ao iniciar lote');
     } finally {
       setActionLoading(false);
@@ -124,15 +128,17 @@ export default function SeparadorLotDetailPage() {
     setActionLoading(true);
     try {
       await closeLotForSeparator(lotId);
+      playSound('scan-complete');
       toast.success('Lote finalizado! Aguardando bipagem.');
       confetti({
-        particleCount: 50,
-        spread: 60,
+        particleCount: 80,
+        spread: 70,
         origin: { y: 0.6 },
-        colors: ['#3B82F6', '#60A5FA'],
+        colors: ['#3B82F6', '#60A5FA', '#93C5FD'],
       });
       await loadData();
     } catch (err) {
+      playSound('error');
       toast.error('Erro ao fechar lote');
     } finally {
       setActionLoading(false);

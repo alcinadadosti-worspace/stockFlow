@@ -5,6 +5,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { taskLogSchema, taskTypeSchema, type TaskLogForm, type TaskTypeForm } from '@/lib/schemas';
 import { useAuth } from '@/hooks/useAuth';
+import { useSound } from '@/hooks/useSound';
+import confetti from 'canvas-confetti';
 import { getActiveTaskTypes, getAllTaskTypes, createTaskType, updateTaskType, deleteTaskType } from '@/services/firestore/taskTypes';
 import { createTaskLog, getTaskLogsByUser, getAllTaskLogs } from '@/services/firestore/taskLogs';
 import { calculateTaskXp } from '@/lib/xp';
@@ -51,6 +53,7 @@ export default function TarefasPage() {
 // ─── ADMIN VERSION ─────────────────────────────────────────────────────────────
 
 function AdminTarefas() {
+  const { playSound } = useSound();
   const [tasks, setTasks] = useState<TaskType[]>([]);
   const [logs, setLogs] = useState<TaskLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -102,14 +105,17 @@ function AdminTarefas() {
     try {
       if (editingTask) {
         await updateTaskType(editingTask.id, { name: data.name, xp: data.xp });
+        playSound('success');
         toast.success('Tarefa atualizada');
       } else {
         await createTaskType({ name: data.name, xp: data.xp });
+        playSound('lot-created');
         toast.success('Tarefa criada');
       }
       setDialogOpen(false);
       await loadData();
     } catch {
+      playSound('error');
       toast.error('Erro ao salvar tarefa');
     } finally {
       setSaving(false);
@@ -130,10 +136,12 @@ function AdminTarefas() {
     if (!deletingTask) return;
     try {
       await deleteTaskType(deletingTask.id);
+      playSound('success');
       toast.success('Tarefa excluída');
       setDeleteDialogOpen(false);
       await loadData();
     } catch {
+      playSound('error');
       toast.error('Erro ao excluir');
     }
   }
@@ -174,10 +182,11 @@ function AdminTarefas() {
             </p>
           ) : (
             <div className="space-y-2">
-              {tasks.map((task) => (
+              {tasks.map((task, index) => (
                 <div
                   key={task.id}
-                  className="flex items-center gap-4 rounded-lg border p-4"
+                  className="flex items-center gap-4 rounded-lg border p-4 opacity-0 animate-fade-in-up hover:shadow-md transition-shadow"
+                  style={{ animationDelay: `${index * 80}ms` }}
                 >
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
@@ -238,10 +247,11 @@ function AdminTarefas() {
             </p>
           ) : (
             <div className="space-y-2">
-              {logs.slice(0, 50).map((log) => (
+              {logs.slice(0, 50).map((log, index) => (
                 <div
                   key={log.id}
-                  className="flex items-center justify-between rounded-lg border p-3"
+                  className="flex items-center justify-between rounded-lg border p-3 opacity-0 animate-slide-in-right hover:bg-accent/50 transition-colors"
+                  style={{ animationDelay: `${index * 40}ms` }}
                 >
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
@@ -319,6 +329,7 @@ function AdminTarefas() {
 
 function EstoquistaTarefas() {
   const { user } = useAuth();
+  const { playSound } = useSound();
   const [taskTypes, setTaskTypes] = useState<TaskType[]>([]);
   const [logs, setLogs] = useState<TaskLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -371,6 +382,13 @@ function EstoquistaTarefas() {
         note: data.note || '',
       });
 
+      playSound('success');
+      confetti({
+        particleCount: 60,
+        spread: 50,
+        origin: { y: 0.7 },
+      });
+
       toast.success(`+${xp} XP!`, {
         description: `${taskType.name} registrada com sucesso.`,
       });
@@ -378,6 +396,7 @@ function EstoquistaTarefas() {
       form.reset();
       await loadData();
     } catch (err) {
+      playSound('error');
       toast.error('Erro ao registrar tarefa');
       console.error(err);
     } finally {
@@ -493,10 +512,12 @@ function EstoquistaTarefas() {
               </div>
             ) : (
               <div className="space-y-2">
-                {taskTypes.map((t) => (
+                {taskTypes.map((t, index) => (
                   <div
                     key={t.id}
-                    className="flex items-center justify-between rounded-lg border p-3"
+                    className="flex items-center justify-between rounded-lg border p-3 opacity-0 animate-fade-in-up hover:shadow-md transition-shadow cursor-pointer"
+                    style={{ animationDelay: `${index * 80}ms` }}
+                    onClick={() => form.setValue('taskTypeId', t.id)}
                   >
                     <span className="font-medium">{t.name}</span>
                     <Badge variant="secondary">
@@ -532,10 +553,11 @@ function EstoquistaTarefas() {
             </p>
           ) : (
             <div className="space-y-2">
-              {logs.slice(0, 20).map((log) => (
+              {logs.slice(0, 20).map((log, index) => (
                 <div
                   key={log.id}
-                  className="flex items-center justify-between rounded-lg border p-3"
+                  className="flex items-center justify-between rounded-lg border p-3 opacity-0 animate-slide-in-right hover:bg-accent/50 transition-colors"
+                  style={{ animationDelay: `${index * 50}ms` }}
                 >
                   <div>
                     <p className="font-medium">{log.taskTypeName}</p>

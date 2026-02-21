@@ -153,7 +153,7 @@ export default function LeaderboardPage() {
       {/* Top 3 Podium */}
       {!loading && entries.length >= 3 && (
         <div className="grid grid-cols-3 gap-4">
-          {[1, 0, 2].map((idx) => {
+          {[1, 0, 2].map((idx, i) => {
             const entry = entries[idx];
             if (!entry) return null;
             const isFirst = idx === 0;
@@ -161,12 +161,13 @@ export default function LeaderboardPage() {
               <Card
                 key={entry.uid}
                 className={cn(
-                  'text-center transition-all',
+                  'text-center transition-all opacity-0 animate-scale-in hover:scale-105',
                   isFirst && 'border-amber-500/50 shadow-lg shadow-amber-500/10',
                   idx === 0 && 'row-start-1 col-start-2',
                   idx === 1 && 'row-start-1 col-start-1 mt-6',
                   idx === 2 && 'row-start-1 col-start-3 mt-6',
                 )}
+                style={{ animationDelay: `${i * 150}ms` }}
               >
                 <CardContent className="pt-6">
                   <div className="mb-2 flex justify-center">
@@ -230,10 +231,14 @@ export default function LeaderboardPage() {
           ) : (
             <div className="space-y-2">
               {entries.map((entry, index) => (
-                <div key={entry.uid}>
+                <div
+                  key={entry.uid}
+                  className="opacity-0 animate-slide-in-right"
+                  style={{ animationDelay: `${index * 50}ms` }}
+                >
                   <div
                     className={cn(
-                      'flex items-center gap-4 rounded-lg border p-3 transition-colors',
+                      'flex items-center gap-4 rounded-lg border p-3 transition-all hover:shadow-md',
                       entry.uid === user?.uid && 'border-primary/50 bg-primary/5',
                       isAdmin && 'cursor-pointer hover:bg-accent/50',
                     )}

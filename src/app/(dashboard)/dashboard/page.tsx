@@ -286,15 +286,19 @@ function EstoquistaDashboard() {
 
       {/* Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {statCards.map((card) => {
+        {statCards.map((card, index) => {
           const Icon = card.icon;
           return (
-            <Card key={card.title} className="shadow-sm">
+            <Card
+              key={card.title}
+              className="shadow-sm opacity-0 animate-fade-in-up hover:shadow-md transition-shadow"
+              style={{ animationDelay: `${index * 100}ms` }}
+            >
               <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
                   {card.title}
                 </CardTitle>
-                <div className={`p-2 rounded-lg ${card.iconBg}`}>
+                <div className={`p-2 rounded-lg ${card.iconBg} transition-transform hover:scale-110`}>
                   <Icon className={`h-5 w-5 ${card.iconColor}`} />
                 </div>
               </CardHeader>
@@ -307,7 +311,7 @@ function EstoquistaDashboard() {
       </div>
 
       {/* XP Level Progress */}
-      <Card className="shadow-sm">
+      <Card className="shadow-sm opacity-0 animate-fade-in-up" style={{ animationDelay: '400ms' }}>
         <CardContent className="pt-6">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-3">
@@ -330,11 +334,11 @@ function EstoquistaDashboard() {
       </Card>
 
       {/* XP Chart */}
-      <Card className="shadow-sm">
+      <Card className="shadow-sm opacity-0 animate-fade-in-up" style={{ animationDelay: '500ms' }}>
         <CardHeader>
           <div className="flex items-center gap-2">
             <TrendingUp className="h-5 w-5 text-muted-foreground" />
-            <CardTitle className="text-base">XP por Dia (Mês Atual)</CardTitle>
+            <CardTitle className="text-base">XP por Dia (Mes Atual)</CardTitle>
           </div>
         </CardHeader>
         <CardContent>
@@ -391,7 +395,7 @@ function EstoquistaDashboard() {
       {/* Recent Activity and Badges */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Recent Activity */}
-        <Card className="shadow-sm">
+        <Card className="shadow-sm opacity-0 animate-fade-in-up" style={{ animationDelay: '600ms' }}>
           <CardHeader>
             <CardTitle className="text-base">Atividade Recente</CardTitle>
           </CardHeader>
@@ -469,7 +473,7 @@ function EstoquistaDashboard() {
         </Card>
 
         {/* Badges */}
-        <Card className="shadow-sm">
+        <Card className="shadow-sm opacity-0 animate-fade-in-up" style={{ animationDelay: '700ms' }}>
           <CardHeader>
             <div className="flex items-center gap-2">
               <Award className="h-5 w-5 text-muted-foreground" />

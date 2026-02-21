@@ -1,8 +1,9 @@
 'use client';
 
 import { useAuth } from '@/hooks/useAuth';
+import { useSound } from '@/hooks/useSound';
 import { useTheme } from 'next-themes';
-import { Moon, Sun, User } from 'lucide-react';
+import { Moon, Sun, Volume2, VolumeX } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { calculateLevel } from '@/lib/utils';
@@ -10,6 +11,7 @@ import { calculateLevel } from '@/lib/utils';
 export function Header() {
   const { user } = useAuth();
   const { theme, setTheme } = useTheme();
+  const { soundEnabled, toggleSound } = useSound();
 
   const level = user?.xpTotal ? calculateLevel(user.xpTotal) : 1;
 
@@ -37,6 +39,18 @@ export function Header() {
             <span className="text-xs">🔥 {user.streak} dias</span>
           </Badge>
         ) : null}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={toggleSound}
+          title={soundEnabled ? 'Desativar sons' : 'Ativar sons'}
+        >
+          {soundEnabled ? (
+            <Volume2 className="h-4 w-4" />
+          ) : (
+            <VolumeX className="h-4 w-4 text-muted-foreground" />
+          )}
+        </Button>
         <Button
           variant="ghost"
           size="icon"

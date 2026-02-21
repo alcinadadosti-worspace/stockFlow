@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { useSound } from '@/hooks/useSound';
 import {
   getLot,
   getLotOrders,
@@ -90,6 +91,7 @@ export default function BipadorLotDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { user } = useAuth();
+  const { playSound } = useSound();
   const lotId = params.lotId as string;
 
   const [lot, setLot] = useState<Lot | null>(null);
@@ -144,9 +146,11 @@ export default function BipadorLotDetailPage() {
     setActionLoading(true);
     try {
       await startScanning(lotId);
+      playSound('scan-start');
       toast.success('Bipagem iniciada! Bipe os pedidos.');
       await loadData();
     } catch (err) {
+      playSound('error');
       toast.error('Erro ao iniciar bipagem');
     } finally {
       setActionLoading(false);
@@ -171,7 +175,7 @@ export default function BipadorLotDetailPage() {
       const result = await sealOrder(lotId, selectedOrderId, code);
       if (!result.success) {
         setSealError(result.error || 'Erro ao encerrar pedido.');
-        try { new Audio('/error.mp3').play().catch(() => {}); } catch {}
+        playSound('error');
         return;
       }
 
@@ -179,7 +183,7 @@ export default function BipadorLotDetailPage() {
         description: `Lacre ${code} aplicado.`,
       });
 
-      try { new Audio('/success.mp3').play().catch(() => {}); } catch {}
+      playSound('success');
 
       setSealInput('');
       await loadData();
@@ -188,16 +192,18 @@ export default function BipadorLotDetailPage() {
       const allSealed = await checkAllOrdersSealed(lotId);
       if (allSealed) {
         await completeLot(lotId);
+        playSound('lot-finished');
         toast.success('Lote concluido! Parabens!');
         confetti({
-          particleCount: 100,
-          spread: 70,
+          particleCount: 150,
+          spread: 90,
           origin: { y: 0.6 },
           colors: ['#FFD700', '#FFA500', '#FF6347'],
         });
         await loadData();
       }
     } catch (err) {
+      playSound('error');
       toast.error('Erro ao encerrar pedido');
     } finally {
       setActionLoading(false);

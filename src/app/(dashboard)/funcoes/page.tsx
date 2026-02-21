@@ -19,9 +19,13 @@ export default function FuncoesPage() {
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         {/* Funcao Geral */}
-        <Card className="cursor-pointer transition-all hover:border-primary hover:shadow-lg" onClick={() => router.push('/lotes')}>
+        <Card
+          className="cursor-pointer transition-all hover:border-primary hover:shadow-lg hover:scale-105 opacity-0 animate-fade-in-up"
+          style={{ animationDelay: '0ms' }}
+          onClick={() => router.push('/lotes')}
+        >
           <CardHeader className="text-center">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-violet-500/10">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-violet-500/10 transition-transform group-hover:scale-110">
               <Layers className="h-8 w-8 text-violet-500" />
             </div>
             <CardTitle>Funcao Completa</CardTitle>
@@ -40,7 +44,11 @@ export default function FuncoesPage() {
         </Card>
 
         {/* Funcao Separador */}
-        <Card className="cursor-pointer transition-all hover:border-primary hover:shadow-lg" onClick={() => router.push('/separador')}>
+        <Card
+          className="cursor-pointer transition-all hover:border-primary hover:shadow-lg hover:scale-105 opacity-0 animate-fade-in-up"
+          style={{ animationDelay: '100ms' }}
+          onClick={() => router.push('/separador')}
+        >
           <CardHeader className="text-center">
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-blue-500/10">
               <Package className="h-8 w-8 text-blue-500" />
@@ -61,7 +69,11 @@ export default function FuncoesPage() {
         </Card>
 
         {/* Funcao Bipador */}
-        <Card className="cursor-pointer transition-all hover:border-primary hover:shadow-lg" onClick={() => router.push('/bipador')}>
+        <Card
+          className="cursor-pointer transition-all hover:border-primary hover:shadow-lg hover:scale-105 opacity-0 animate-fade-in-up"
+          style={{ animationDelay: '200ms' }}
+          onClick={() => router.push('/bipador')}
+        >
           <CardHeader className="text-center">
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-amber-500/10">
               <ScanLine className="h-8 w-8 text-amber-500" />
@@ -82,7 +94,11 @@ export default function FuncoesPage() {
         </Card>
 
         {/* Pedido Avulso */}
-        <Card className="cursor-pointer transition-all hover:border-primary hover:shadow-lg" onClick={() => router.push('/pedido-avulso')}>
+        <Card
+          className="cursor-pointer transition-all hover:border-primary hover:shadow-lg hover:scale-105 opacity-0 animate-fade-in-up"
+          style={{ animationDelay: '300ms' }}
+          onClick={() => router.push('/pedido-avulso')}
+        >
           <CardHeader className="text-center">
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-500/10">
               <ClipboardList className="h-8 w-8 text-green-500" />
