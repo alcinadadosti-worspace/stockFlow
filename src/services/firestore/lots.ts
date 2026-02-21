@@ -246,6 +246,15 @@ export async function claimLotForScanning(
   scannerUid: string,
   scannerName: string,
 ): Promise<void> {
+  // Verificar se o lote esta pronto para bipagem
+  const lot = await getLot(lotId);
+  if (!lot) {
+    throw new Error('Lote nao encontrado.');
+  }
+  if (lot.status !== 'READY_FOR_SCAN') {
+    throw new Error('Este lote ainda nao esta pronto para bipagem. Aguarde o separador finalizar.');
+  }
+
   await updateDoc(doc(getFirebaseDb(), 'lots', lotId), {
     status: 'CLOSING' as LotStatus,
     scannerUid,
@@ -566,6 +575,15 @@ export async function startAssignedLot(lotId: string, executorUid: string, execu
 
 // Bipador assume lote atribuido a ele
 export async function startAssignedScanning(lotId: string, scannerUid: string, scannerName: string): Promise<void> {
+  // Verificar se o lote esta pronto para bipagem
+  const lot = await getLot(lotId);
+  if (!lot) {
+    throw new Error('Lote nao encontrado.');
+  }
+  if (lot.status !== 'READY_FOR_SCAN') {
+    throw new Error('Este lote ainda nao esta pronto para bipagem. Aguarde o separador finalizar.');
+  }
+
   await updateDoc(doc(getFirebaseDb(), 'lots', lotId), {
     status: 'CLOSING' as LotStatus,
     scannerUid,

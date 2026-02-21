@@ -52,12 +52,13 @@ export default function BipadorPage() {
         getAssignedLotsScanner(user.uid),
       ]);
 
-      // Lotes disponiveis: READY_FOR_SCAN abertos + atribuidos a mim que ainda nao comecei
-      const assignedNotStarted = assigned.filter(
-        (l) => l.status === 'READY_FOR_SCAN' || (l.status === 'DRAFT' && l.assignedScannerUid === user.uid)
+      // Lotes disponiveis: apenas READY_FOR_SCAN (separador ja finalizou)
+      // Bipador so pode ver/assumir lotes depois que o separador terminar
+      const assignedReadyForScan = assigned.filter(
+        (l) => l.status === 'READY_FOR_SCAN'
       );
       const allAvailable = [...available];
-      for (const lot of assignedNotStarted) {
+      for (const lot of assignedReadyForScan) {
         if (!allAvailable.find((l) => l.id === lot.id)) {
           allAvailable.push(lot);
         }
