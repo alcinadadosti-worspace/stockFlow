@@ -30,31 +30,37 @@ export async function checkLotCodeExists(lotCode: string): Promise<boolean> {
 
 // Verifica se um codigo de pedido ja existe em qualquer lote
 export async function checkOrderCodeExists(orderCode: string): Promise<{ exists: boolean; lotCode?: string }> {
-  // Buscar em todos os lotes
-  const ordersQuery = query(
-    collectionGroup(getFirebaseDb(), 'orders'),
-    where('orderCode', '==', orderCode),
-  );
-  const snap = await getDocs(ordersQuery);
+  try {
+    // Buscar em todos os lotes
+    const ordersQuery = query(
+      collectionGroup(getFirebaseDb(), 'orders'),
+      where('orderCode', '==', orderCode),
+    );
+    const snap = await getDocs(ordersQuery);
 
-  if (!snap.empty) {
-    const firstDoc = snap.docs[0];
-    const lotId = firstDoc.ref.parent.parent?.id;
-    return { exists: true, lotCode: lotId };
+    if (!snap.empty) {
+      const firstDoc = snap.docs[0];
+      const lotId = firstDoc.ref.parent.parent?.id;
+      return { exists: true, lotCode: lotId };
+    }
+
+    // Buscar em pedidos avulsos
+    const singleOrdersQuery = query(
+      collection(getFirebaseDb(), 'singleOrders'),
+      where('orderCode', '==', orderCode),
+    );
+    const singleSnap = await getDocs(singleOrdersQuery);
+
+    if (!singleSnap.empty) {
+      return { exists: true, lotCode: 'Pedido Avulso' };
+    }
+
+    return { exists: false };
+  } catch (error) {
+    // Se o indice nao existe, pular a verificacao (log para debug)
+    console.warn('Erro ao verificar pedido duplicado (indice pode estar faltando):', error);
+    return { exists: false };
   }
-
-  // Buscar em pedidos avulsos
-  const singleOrdersQuery = query(
-    collection(getFirebaseDb(), 'singleOrders'),
-    where('orderCode', '==', orderCode),
-  );
-  const singleSnap = await getDocs(singleOrdersQuery);
-
-  if (!singleSnap.empty) {
-    return { exists: true, lotCode: 'Pedido Avulso' };
-  }
-
-  return { exists: false };
 }
 
 // Verifica multiplos codigos de pedido de uma vez
@@ -81,15 +87,22 @@ export async function createLot(
   // Validar se o codigo do lote ja existe
   const lotExists = await checkLotCodeExists(lotCode);
   if (lotExists) {
-    throw new Error(`O lote ${lotCode} ja existe no sistema.`);
+    throw new Error(`Lote ${lotCode} duplicado! Ja existe no sistema.`);
   }
 
   // Validar se algum codigo de pedido ja existe
-  const orderCodes = orders.map((o) => o.orderCode);
-  const duplicateOrders = await checkMultipleOrderCodesExist(orderCodes);
-  if (duplicateOrders.length > 0) {
-    const firstDup = duplicateOrders[0];
-    throw new Error(`O pedido ${firstDup.code} ja existe no ${firstDup.lotCode}.`);
+  try {
+    const orderCodes = orders.map((o) => o.orderCode);
+    const duplicateOrders = await checkMultipleOrderCodesExist(orderCodes);
+    if (duplicateOrders.length > 0) {
+      const firstDup = duplicateOrders[0];
+      throw new Error(`Pedido ${firstDup.code} duplicado! Ja existe no ${firstDup.lotCode}.`);
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('duplicado')) {
+      throw error;
+    }
+    console.warn('Erro ao verificar pedidos duplicados:', error);
   }
 
   const lotId = lotCode;
@@ -264,7 +277,7 @@ export async function sealOrder(
       const sealRef = doc(getFirebaseDb(), 'sealedCodes', sealedCode);
       const sealSnap = await transaction.get(sealRef);
       if (sealSnap.exists()) {
-        throw new Error(`Lacre ${sealedCode} já foi utilizado no pedido ${sealSnap.data().orderCode}.`);
+        throw new Error(`Lacre ${sealedCode} duplicado! Ja foi usado no pedido ${sealSnap.data().orderCode}.`);
       }
 
       const orderRef = doc(getFirebaseDb(), 'lots', lotId, 'orders', orderId);
@@ -395,15 +408,22 @@ export async function createAdminLot(
   // Validar se o codigo do lote ja existe
   const lotExists = await checkLotCodeExists(lotCode);
   if (lotExists) {
-    throw new Error(`O lote ${lotCode} ja existe no sistema.`);
+    throw new Error(`Lote ${lotCode} duplicado! Ja existe no sistema.`);
   }
 
   // Validar se algum codigo de pedido ja existe
-  const orderCodes = orders.map((o) => o.orderCode);
-  const duplicateOrders = await checkMultipleOrderCodesExist(orderCodes);
-  if (duplicateOrders.length > 0) {
-    const firstDup = duplicateOrders[0];
-    throw new Error(`O pedido ${firstDup.code} ja existe no ${firstDup.lotCode}.`);
+  try {
+    const orderCodes = orders.map((o) => o.orderCode);
+    const duplicateOrders = await checkMultipleOrderCodesExist(orderCodes);
+    if (duplicateOrders.length > 0) {
+      const firstDup = duplicateOrders[0];
+      throw new Error(`Pedido ${firstDup.code} duplicado! Ja existe no ${firstDup.lotCode}.`);
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('duplicado')) {
+      throw error;
+    }
+    console.warn('Erro ao verificar pedidos duplicados:', error);
   }
 
   const lotId = lotCode;

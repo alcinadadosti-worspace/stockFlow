@@ -28,10 +28,19 @@ export async function createSingleOrder(
   createdByUid: string,
   createdByName: string,
 ): Promise<string> {
-  // Validar se o codigo do pedido ja existe
-  const orderExists = await checkOrderCodeExists(orderCode);
-  if (orderExists.exists) {
-    throw new Error(`O pedido ${orderCode} ja existe no ${orderExists.lotCode}.`);
+  try {
+    // Validar se o codigo do pedido ja existe
+    const orderExists = await checkOrderCodeExists(orderCode);
+    if (orderExists.exists) {
+      throw new Error(`Pedido ${orderCode} duplicado! Ja existe no ${orderExists.lotCode}.`);
+    }
+  } catch (error) {
+    // Se for nosso erro de duplicacao, repassar
+    if (error instanceof Error && error.message.includes('duplicado')) {
+      throw error;
+    }
+    // Outros erros (Firebase), ignorar verificacao
+    console.warn('Erro ao verificar duplicado:', error);
   }
 
   const id = generateSingleOrderId();
@@ -126,7 +135,7 @@ export async function sealSingleOrder(
       const sealRef = doc(getFirebaseDb(), 'sealedCodes', sealedCode);
       const sealSnap = await transaction.get(sealRef);
       if (sealSnap.exists()) {
-        throw new Error(`Lacre ${sealedCode} ja foi utilizado no pedido ${sealSnap.data().orderCode}.`);
+        throw new Error(`Lacre ${sealedCode} duplicado! Ja foi usado no pedido ${sealSnap.data().orderCode}.`);
       }
 
       const orderRef = doc(getFirebaseDb(), 'singleOrders', id);
