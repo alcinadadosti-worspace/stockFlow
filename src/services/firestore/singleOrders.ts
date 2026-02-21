@@ -14,7 +14,7 @@ import {
 } from 'firebase/firestore';
 import { getFirebaseDb } from '@/lib/firebase';
 import type { SingleOrder, SingleOrderStatus } from '@/types';
-import { incrementUserXp, updateUserStreak } from './users';
+import { incrementUserXp, decrementUserXp, updateUserStreak } from './users';
 import { getPickingRules } from './pickingRules';
 import { checkOrderCodeExists } from './lots';
 
@@ -210,7 +210,7 @@ export async function sealSingleOrder(
   }
 }
 
-// Apaga um pedido avulso e seu lacre associado
+// Apaga um pedido avulso e seu lacre associado, removendo XP do usuario
 export async function deleteSingleOrder(id: string): Promise<void> {
   const order = await getSingleOrder(id);
   if (!order) return;
@@ -227,4 +227,9 @@ export async function deleteSingleOrder(id: string): Promise<void> {
   batch.delete(doc(getFirebaseDb(), 'singleOrders', id));
 
   await batch.commit();
+
+  // Remover XP do usuario (apos o batch para garantir que o pedido foi deletado)
+  if (order.status === 'DONE' && order.xpEarned && order.xpEarned > 0) {
+    await decrementUserXp(order.createdByUid, order.xpEarned);
+  }
 }

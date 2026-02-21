@@ -16,7 +16,7 @@ import {
 } from 'firebase/firestore';
 import { getFirebaseDb } from '@/lib/firebase';
 import type { Lot, LotOrder, LotStatus, LotWorkMode, LotAssignmentType, ParsedOrder } from '@/types';
-import { incrementUserXp, updateUserStreak } from './users';
+import { incrementUserXp, decrementUserXp, updateUserStreak } from './users';
 import { getPickingRules } from './pickingRules';
 import { calculateLotXp } from '@/lib/xp';
 
@@ -183,8 +183,11 @@ export async function getLotOrders(lotId: string): Promise<LotOrder[]> {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as LotOrder);
 }
 
-// Apaga um lote e todos os seus pedidos e lacres associados
+// Apaga um lote e todos os seus pedidos e lacres associados, removendo XP dos usuarios
 export async function deleteLot(lotId: string): Promise<void> {
+  // Buscar o lote para verificar XP
+  const lot = await getLot(lotId);
+
   const batch = writeBatch(getFirebaseDb());
 
   // Buscar todos os pedidos do lote
@@ -205,6 +208,27 @@ export async function deleteLot(lotId: string): Promise<void> {
   batch.delete(doc(getFirebaseDb(), 'lots', lotId));
 
   await batch.commit();
+
+  // Remover XP dos usuarios (apos o batch para garantir que o lote foi deletado)
+  if (lot && lot.status === 'DONE' && lot.xpEarned && lot.xpEarned > 0) {
+    // Verificar se foi modo separado (XP dividido)
+    if (lot.separatorXpEarned && lot.scannerXpEarned) {
+      // Remover XP do separador
+      if (lot.separatorUid && lot.separatorXpEarned > 0) {
+        await decrementUserXp(lot.separatorUid, lot.separatorXpEarned);
+      }
+      // Remover XP do bipador
+      if (lot.scannerUid && lot.scannerXpEarned > 0) {
+        await decrementUserXp(lot.scannerUid, lot.scannerXpEarned);
+      }
+    } else {
+      // Modo normal - todo XP foi para o criador ou separador
+      const userToDecrement = lot.separatorUid || lot.createdByUid;
+      if (userToDecrement) {
+        await decrementUserXp(userToDecrement, lot.xpEarned);
+      }
+    }
+  }
 }
 
 export async function startLot(lotId: string): Promise<void> {

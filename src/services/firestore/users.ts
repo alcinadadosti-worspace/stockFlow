@@ -64,6 +64,15 @@ export async function incrementUserXp(uid: string, xp: number): Promise<void> {
   await updateDoc(userRef, { xpTotal: current + xp });
 }
 
+export async function decrementUserXp(uid: string, xp: number): Promise<void> {
+  const userRef = doc(getFirebaseDb(), COLLECTION, uid);
+  const snap = await getDoc(userRef);
+  if (!snap.exists()) return;
+  const current = snap.data().xpTotal || 0;
+  const newXp = Math.max(0, current - xp); // Nao deixa ficar negativo
+  await updateDoc(userRef, { xpTotal: newXp });
+}
+
 export async function updateUserStreak(uid: string): Promise<void> {
   const userRef = doc(getFirebaseDb(), COLLECTION, uid);
   const snap = await getDoc(userRef);
