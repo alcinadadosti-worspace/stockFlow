@@ -2,14 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { getAllUsers, updateUserRole } from '@/services/firestore/users';
+import { getAllUsers, updateUserRole, deleteUser } from '@/services/firestore/users';
 import { useOperator } from '@/hooks/useOperator';
 import type { AppUser, UserRole } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Users, Shield, User, Zap } from 'lucide-react';
+import { Users, Shield, User, Zap, Trash2, Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { calculateLevel, formatDateBR } from '@/lib/utils';
 
@@ -18,6 +19,7 @@ export default function AdminUsuariosPage() {
   const { operator, isAdminMode } = useOperator();
   const [users, setUsers] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   // Proteger pagina - apenas admin mode
   useEffect(() => {
@@ -49,6 +51,23 @@ export default function AdminUsuariosPage() {
       await loadData();
     } catch (err) {
       toast.error('Erro ao atualizar papel');
+    }
+  }
+
+  async function handleDelete(uid: string, name: string) {
+    if (!confirm(`Tem certeza que deseja excluir ${name}? Esta acao remove apenas do Firestore.`)) {
+      return;
+    }
+
+    setDeleting(uid);
+    try {
+      await deleteUser(uid);
+      toast.success(`Usuario ${name} excluido`);
+      await loadData();
+    } catch (err) {
+      toast.error('Erro ao excluir usuario');
+    } finally {
+      setDeleting(null);
     }
   }
 
@@ -140,6 +159,20 @@ export default function AdminUsuariosPage() {
                       <SelectItem value="ESTOQUISTA">Estoquista</SelectItem>
                     </SelectContent>
                   </Select>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                    onClick={() => handleDelete(u.uid, u.name)}
+                    disabled={deleting === u.uid || u.role === 'ADMIN'}
+                    title={u.role === 'ADMIN' ? 'Nao pode excluir admin' : 'Excluir usuario'}
+                  >
+                    {deleting === u.uid ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4" />
+                    )}
+                  </Button>
                 </div>
               ))}
             </div>

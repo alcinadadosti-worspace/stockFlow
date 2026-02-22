@@ -3,6 +3,7 @@ import {
   getDoc,
   setDoc,
   updateDoc,
+  deleteDoc,
   collection,
   getDocs,
   query,
@@ -91,4 +92,9 @@ export async function updateUserStreak(uid: string): Promise<void> {
     streak: newStreak,
     lastActivityDate: today,
   });
+}
+
+// Deleta usuario do Firestore (nao deleta do Firebase Auth)
+export async function deleteUser(uid: string): Promise<void> {
+  await deleteDoc(doc(getFirebaseDb(), COLLECTION, uid));
 }
