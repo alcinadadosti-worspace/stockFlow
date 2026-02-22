@@ -17,6 +17,7 @@ import {
 import { getFirebaseDb } from '@/lib/firebase';
 import type { Lot, LotOrder, LotStatus, LotWorkMode, LotAssignmentType, ParsedOrder } from '@/types';
 import { incrementUserXp, decrementUserXp, updateUserStreak } from './users';
+import { incrementOperatorXp, updateOperatorStreak } from './operators';
 import { getPickingRules } from './pickingRules';
 import { calculateLotXp } from '@/lib/xp';
 
@@ -662,5 +663,205 @@ export async function startAssignedScanning(lotId: string, scannerUid: string, s
     scannerUid,
     scannerName,
     scanStartAt: Timestamp.now(),
+  });
+}
+
+// ==================== FUNCOES PARA MODO OPERADOR ====================
+
+// Cria lote com operador (terminal compartilhado)
+export async function createLotWithOperator(
+  lotCode: string,
+  orders: ParsedOrder[],
+  createdByUid: string,
+  createdByName: string,
+  operatorCode: string,
+  operatorName: string,
+  workMode: LotWorkMode = 'GERAL',
+): Promise<string> {
+  // Validar se o codigo do lote ja existe
+  const lotExists = await checkLotCodeExists(lotCode);
+  if (lotExists) {
+    throw new Error(`Lote ${lotCode} duplicado! Ja existe no sistema.`);
+  }
+
+  // Validar se algum codigo de pedido ja existe
+  try {
+    const orderCodes = orders.map((o) => o.orderCode);
+    const duplicateOrders = await checkMultipleOrderCodesExist(orderCodes);
+    if (duplicateOrders.length > 0) {
+      const firstDup = duplicateOrders[0];
+      throw new Error(`Pedido ${firstDup.code} duplicado! Ja existe no ${firstDup.lotCode}.`);
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('duplicado')) {
+      throw error;
+    }
+    console.warn('Erro ao verificar pedidos duplicados:', error);
+  }
+
+  const lotId = lotCode;
+  const now = Timestamp.now();
+
+  const totalItems = orders.reduce((sum, o) => sum + o.items, 0);
+  const cycle = orders[0]?.cycle || '';
+
+  await setDoc(doc(getFirebaseDb(), 'lots', lotId), {
+    lotCode,
+    createdByUid,
+    createdByName,
+    status: 'DRAFT' as LotStatus,
+    cycle,
+    startAt: null,
+    endAt: null,
+    createdAt: now,
+    totals: { orders: orders.length, items: totalItems },
+    xpEarned: 0,
+    durationMs: 0,
+    workMode,
+    // Campos de operador
+    operatorCode,
+    operatorName,
+    separatorOperatorCode: operatorCode,
+    separatorOperatorName: operatorName,
+  });
+
+  const batch = writeBatch(getFirebaseDb());
+  for (const order of orders) {
+    const orderRef = doc(getFirebaseDb(), 'lots', lotId, 'orders', order.orderCode);
+    batch.set(orderRef, {
+      orderCode: order.orderCode,
+      cycle: order.cycle,
+      approvedAt: order.approvedAt ? Timestamp.fromDate(order.approvedAt) : null,
+      items: order.items,
+      status: 'PENDING',
+      sealedCode: null,
+      sealedAt: null,
+      createdAt: now,
+    });
+  }
+  await batch.commit();
+
+  return lotId;
+}
+
+// Inicia lote com operador
+export async function startLotWithOperator(
+  lotId: string,
+  operatorCode: string,
+  operatorName: string,
+): Promise<void> {
+  await updateDoc(doc(getFirebaseDb(), 'lots', lotId), {
+    status: 'IN_PROGRESS' as LotStatus,
+    startAt: Timestamp.now(),
+    operatorCode,
+    operatorName,
+    separatorOperatorCode: operatorCode,
+    separatorOperatorName: operatorName,
+  });
+}
+
+// Bipador assume lote com operador
+export async function claimLotForScanningWithOperator(
+  lotId: string,
+  operatorCode: string,
+  operatorName: string,
+): Promise<void> {
+  const lot = await getLot(lotId);
+  if (!lot) {
+    throw new Error('Lote nao encontrado.');
+  }
+  if (lot.status !== 'READY_FOR_SCAN') {
+    throw new Error('Este lote ainda nao esta pronto para bipagem. Aguarde o separador finalizar.');
+  }
+
+  await updateDoc(doc(getFirebaseDb(), 'lots', lotId), {
+    status: 'CLOSING' as LotStatus,
+    scannerOperatorCode: operatorCode,
+    scannerOperatorName: operatorName,
+    scanStartAt: Timestamp.now(),
+  });
+}
+
+// Completa lote e da XP para operador
+export async function completeLotWithOperator(lotId: string): Promise<void> {
+  const lotSnap = await getDoc(doc(getFirebaseDb(), 'lots', lotId));
+  if (!lotSnap.exists()) return;
+
+  const lot = lotSnap.data() as Omit<Lot, 'id'>;
+  const now = Timestamp.now();
+
+  const startMs = lot.startAt?.toMillis() || 0;
+  const endMs = lot.endAt?.toMillis() || Date.now();
+  const durationMs = endMs - startMs;
+
+  const scanStartMs = lot.scanStartAt?.toMillis() || endMs;
+  const scanEndMs = now.toMillis();
+  const scanDurationMs = scanEndMs - scanStartMs;
+
+  const totalDurationMs = scanEndMs - endMs;
+
+  const rules = await getPickingRules();
+  const xpResult = calculateLotXp(lot.totals, durationMs, rules);
+
+  // Verificar se tem operadores diferentes (separador vs bipador)
+  const hasSeparateOperators = lot.scannerOperatorCode &&
+    lot.separatorOperatorCode !== lot.scannerOperatorCode;
+
+  if (hasSeparateOperators) {
+    // Divide XP: 60% para separador, 40% para bipador
+    const separatorXp = Math.round(xpResult.total * 0.6);
+    const scannerXp = Math.round(xpResult.total * 0.4);
+
+    await updateDoc(doc(getFirebaseDb(), 'lots', lotId), {
+      status: 'DONE' as LotStatus,
+      xpEarned: xpResult.total,
+      separatorXpEarned: separatorXp,
+      scannerXpEarned: scannerXp,
+      durationMs,
+      scanEndAt: now,
+      scanDurationMs,
+      totalDurationMs,
+    });
+
+    // Dar XP para os operadores
+    if (lot.separatorOperatorCode) {
+      await incrementOperatorXp(lot.separatorOperatorCode, separatorXp);
+      await updateOperatorStreak(lot.separatorOperatorCode);
+    }
+    if (lot.scannerOperatorCode) {
+      await incrementOperatorXp(lot.scannerOperatorCode, scannerXp);
+      await updateOperatorStreak(lot.scannerOperatorCode);
+    }
+  } else {
+    // Modo normal - todo XP para o operador
+    await updateDoc(doc(getFirebaseDb(), 'lots', lotId), {
+      status: 'DONE' as LotStatus,
+      xpEarned: xpResult.total,
+      durationMs,
+      scanEndAt: now,
+      scanDurationMs,
+      totalDurationMs,
+    });
+
+    const operatorCode = lot.operatorCode || lot.separatorOperatorCode;
+    if (operatorCode) {
+      await incrementOperatorXp(operatorCode, xpResult.total);
+      await updateOperatorStreak(operatorCode);
+    }
+  }
+}
+
+// Busca lotes por operador
+export async function getLotsByOperator(operatorCode: string): Promise<Lot[]> {
+  const q = query(
+    collection(getFirebaseDb(), 'lots'),
+    where('operatorCode', '==', operatorCode),
+  );
+  const snap = await getDocs(q);
+  const lots = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Lot);
+  return lots.sort((a, b) => {
+    const aTime = a.createdAt?.toMillis() || 0;
+    const bTime = b.createdAt?.toMillis() || 0;
+    return bTime - aTime;
   });
 }

@@ -1,12 +1,26 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Package, ScanLine, Layers, ClipboardList } from 'lucide-react';
+import { OperatorSelectDialog } from '@/components/operators/operator-select-dialog';
+
+type FunctionType = 'lotes' | 'separador' | 'bipador' | 'pedido-avulso' | null;
+
+const FUNCTION_TITLES: Record<string, string> = {
+  'lotes': 'Funcao Completa',
+  'separador': 'Separador',
+  'bipador': 'Bipador',
+  'pedido-avulso': 'Pedido Avulso',
+};
 
 export default function FuncoesPage() {
-  const router = useRouter();
+  const [selectedFunction, setSelectedFunction] = useState<FunctionType>(null);
+
+  function handleCardClick(func: FunctionType) {
+    setSelectedFunction(func);
+  }
 
   return (
     <div className="space-y-6">
@@ -22,7 +36,7 @@ export default function FuncoesPage() {
         <Card
           className="cursor-pointer transition-all hover:border-primary hover:shadow-lg hover:scale-105 opacity-0 animate-fade-in-up"
           style={{ animationDelay: '0ms' }}
-          onClick={() => router.push('/lotes')}
+          onClick={() => handleCardClick('lotes')}
         >
           <CardHeader className="text-center">
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-violet-500/10 transition-transform group-hover:scale-110">
@@ -47,7 +61,7 @@ export default function FuncoesPage() {
         <Card
           className="cursor-pointer transition-all hover:border-primary hover:shadow-lg hover:scale-105 opacity-0 animate-fade-in-up"
           style={{ animationDelay: '100ms' }}
-          onClick={() => router.push('/separador')}
+          onClick={() => handleCardClick('separador')}
         >
           <CardHeader className="text-center">
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-blue-500/10">
@@ -72,7 +86,7 @@ export default function FuncoesPage() {
         <Card
           className="cursor-pointer transition-all hover:border-primary hover:shadow-lg hover:scale-105 opacity-0 animate-fade-in-up"
           style={{ animationDelay: '200ms' }}
-          onClick={() => router.push('/bipador')}
+          onClick={() => handleCardClick('bipador')}
         >
           <CardHeader className="text-center">
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-amber-500/10">
@@ -97,7 +111,7 @@ export default function FuncoesPage() {
         <Card
           className="cursor-pointer transition-all hover:border-primary hover:shadow-lg hover:scale-105 opacity-0 animate-fade-in-up"
           style={{ animationDelay: '300ms' }}
-          onClick={() => router.push('/pedido-avulso')}
+          onClick={() => handleCardClick('pedido-avulso')}
         >
           <CardHeader className="text-center">
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-500/10">
@@ -118,6 +132,14 @@ export default function FuncoesPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Modal de seleção de operador */}
+      <OperatorSelectDialog
+        open={selectedFunction !== null}
+        onClose={() => setSelectedFunction(null)}
+        redirectTo={`/${selectedFunction}`}
+        title={selectedFunction ? FUNCTION_TITLES[selectedFunction] : 'Identificação'}
+      />
     </div>
   );
 }

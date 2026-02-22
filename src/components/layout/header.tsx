@@ -1,31 +1,79 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useSound } from '@/hooks/useSound';
+import { useOperator } from '@/hooks/useOperator';
 import { useTheme } from 'next-themes';
-import { Moon, Sun, Volume2, VolumeX } from 'lucide-react';
+import { Moon, Sun, Volume2, VolumeX, UserCircle, Shield, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { calculateLevel } from '@/lib/utils';
 
 export function Header() {
+  const router = useRouter();
   const { user } = useAuth();
   const { theme, setTheme } = useTheme();
   const { soundEnabled, toggleSound } = useSound();
+  const { operator, isAdminMode, clearOperator } = useOperator();
 
   const level = user?.xpTotal ? calculateLevel(user.xpTotal) : 1;
+
+  function handleChangeOperator() {
+    clearOperator();
+    router.push('/funcoes');
+  }
 
   return (
     <header className="flex h-16 items-center justify-between border-b bg-card px-6">
       <div>
-        <h2 className="text-lg font-semibold">
-          Olá, {user?.name || 'Estoquista'}
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          {user?.role === 'ADMIN' ? 'Administrador' : 'Estoquista'}
-        </p>
+        {operator ? (
+          <>
+            <div className="flex items-center gap-2">
+              <UserCircle className="h-5 w-5 text-primary" />
+              <h2 className="text-lg font-semibold">
+                Operador {operator.code} - {operator.name}
+              </h2>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Trabalhando como operador
+            </p>
+          </>
+        ) : isAdminMode ? (
+          <>
+            <div className="flex items-center gap-2">
+              <Shield className="h-5 w-5 text-amber-500" />
+              <h2 className="text-lg font-semibold">
+                Modo Administrador
+              </h2>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Acesso completo ao sistema
+            </p>
+          </>
+        ) : (
+          <>
+            <h2 className="text-lg font-semibold">
+              Olá, {user?.name || 'Estoquista'}
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              {user?.role === 'ADMIN' ? 'Administrador' : 'Estoquista'}
+            </p>
+          </>
+        )}
       </div>
       <div className="flex items-center gap-3">
+        {(operator || isAdminMode) && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleChangeOperator}
+            className="gap-2"
+          >
+            <RefreshCw className="h-3 w-3" />
+            Trocar
+          </Button>
+        )}
         <Badge variant="secondary" className="gap-1 px-3 py-1">
           <span className="text-xs font-medium">Nível {level}</span>
         </Badge>

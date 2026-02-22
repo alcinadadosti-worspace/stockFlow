@@ -10,6 +10,7 @@ import {
   ClipboardList,
   Package,
   Users,
+  UserCog,
   Sliders,
   BarChart3,
   LogOut,
@@ -36,6 +37,7 @@ const mainNav = [
 
 const adminNav = [
   { href: '/admin/lotes', label: 'Gerenciar Lotes', icon: Package },
+  { href: '/admin/operadores', label: 'Operadores', icon: UserCog },
   { href: '/admin/regras-xp', label: 'Regras de XP', icon: Sliders },
   { href: '/admin/usuarios', label: 'Usuários', icon: Users },
   { href: '/admin/relatorios', label: 'Relatórios', icon: BarChart3 },

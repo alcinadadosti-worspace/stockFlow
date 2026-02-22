@@ -2,6 +2,17 @@ import { Timestamp } from 'firebase/firestore';
 
 export type UserRole = 'ADMIN' | 'ESTOQUISTA';
 
+// Operador (estoquista identificado por código)
+export interface Operator {
+  code: string; // "01", "02", etc.
+  name: string;
+  active: boolean;
+  xpTotal: number;
+  streak: number;
+  lastActivityDate?: string; // YYYY-MM-DD
+  createdAt: Timestamp;
+}
+
 export interface AppUser {
   uid: string;
   name: string;
@@ -96,6 +107,13 @@ export interface Lot {
   // Usuario atribuido para bipar
   assignedScannerUid?: string;
   assignedScannerName?: string;
+  // Campos para modo operador (terminal compartilhado)
+  operatorCode?: string;
+  operatorName?: string;
+  separatorOperatorCode?: string;
+  separatorOperatorName?: string;
+  scannerOperatorCode?: string;
+  scannerOperatorName?: string;
 }
 
 export interface LotOrder {

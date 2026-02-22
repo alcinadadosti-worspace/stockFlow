@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useSound } from '@/hooks/useSound';
+import { useOperator } from '@/hooks/useOperator';
 import {
   getLot,
   getLotOrders,
@@ -11,8 +12,10 @@ import {
   closeLot,
   sealOrder,
   completeLot,
+  completeLotWithOperator,
   checkAllOrdersSealed,
   startScanning,
+  startLotWithOperator,
 } from '@/services/firestore/lots';
 import { getPickingRules } from '@/services/firestore/pickingRules';
 import { calculateLotXp } from '@/lib/xp';
@@ -96,6 +99,7 @@ export default function LotDetailPage() {
   const router = useRouter();
   const { user } = useAuth();
   const { playSound } = useSound();
+  const { operator } = useOperator();
   const lotId = params.lotId as string;
 
   const [lot, setLot] = useState<Lot | null>(null);
@@ -150,7 +154,11 @@ export default function LotDetailPage() {
     if (!user) return;
     setActionLoading(true);
     try {
-      await startLot(lotId, user.uid, user.name);
+      if (operator) {
+        await startLotWithOperator(lotId, operator.code, operator.name);
+      } else {
+        await startLot(lotId, user.uid, user.name);
+      }
       playSound('lot-started');
       toast.success('Lote iniciado! Bom trabalho!');
       await loadData();
@@ -226,7 +234,11 @@ export default function LotDetailPage() {
       // Check if all sealed
       const allSealed = await checkAllOrdersSealed(lotId);
       if (allSealed) {
-        await completeLot(lotId);
+        if (operator) {
+          await completeLotWithOperator(lotId);
+        } else {
+          await completeLot(lotId);
+        }
         playSound('lot-finished');
         toast.success('Lote concluído! Parabéns!');
         confetti({

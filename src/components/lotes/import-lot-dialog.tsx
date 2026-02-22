@@ -5,8 +5,9 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { lotImportSchema, type LotImportForm } from '@/lib/schemas';
 import { parseSpreadsheet } from '@/lib/spreadsheet';
-import { createLot } from '@/services/firestore/lots';
+import { createLot, createLotWithOperator } from '@/services/firestore/lots';
 import { useAuth } from '@/hooks/useAuth';
+import { useOperator } from '@/hooks/useOperator';
 import type { LotWorkMode, ParsedOrder } from '@/types';
 import {
   Dialog,
@@ -33,6 +34,7 @@ interface ImportLotDialogProps {
 
 export function ImportLotDialog({ open, onClose, onSuccess, workMode = 'GERAL' }: ImportLotDialogProps) {
   const { user } = useAuth();
+  const { operator } = useOperator();
   const [step, setStep] = useState<'upload' | 'preview' | 'saving'>('upload');
   const [orders, setOrders] = useState<ParsedOrder[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
@@ -80,7 +82,21 @@ export function ImportLotDialog({ open, onClose, onSuccess, workMode = 'GERAL' }
     setSaving(true);
     setStep('saving');
     try {
-      await createLot(data.lotCode, orders, user.uid, user.name, workMode);
+      if (operator) {
+        // Modo operador
+        await createLotWithOperator(
+          data.lotCode,
+          orders,
+          user.uid,
+          user.name,
+          operator.code,
+          operator.name,
+          workMode,
+        );
+      } else {
+        // Modo tradicional (admin direto)
+        await createLot(data.lotCode, orders, user.uid, user.name, workMode);
+      }
       toast.success('Lote importado com sucesso!', {
         description: `${orders.length} pedidos importados.`,
       });

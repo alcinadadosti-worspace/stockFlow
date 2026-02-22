@@ -3,13 +3,14 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
-import { getAllLots, getLotsByUser, getAssignedLotsGeneral, getOpenAdminLots } from '@/services/firestore/lots';
+import { useOperator } from '@/hooks/useOperator';
+import { getAllLots, getLotsByUser, getAssignedLotsGeneral, getOpenAdminLots, getLotsByOperator } from '@/services/firestore/lots';
 import type { Lot } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Package, Plus, Clock, CheckCircle2, Loader2, FileEdit, Hourglass, Star } from 'lucide-react';
+import { Package, Plus, Clock, CheckCircle2, Loader2, FileEdit, Hourglass, Star, UserCircle } from 'lucide-react';
 import { formatDateTimeBR, formatDuration } from '@/lib/utils';
 import { LOT_STATUS_LABELS } from '@/lib/constants';
 import { cn } from '@/lib/utils';
@@ -39,6 +40,7 @@ function getStatusIcon(status: string) {
 
 export default function LotesPage() {
   const { user } = useAuth();
+  const { operator, isAdminMode } = useOperator();
   const router = useRouter();
   const [lots, setLots] = useState<Lot[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,27 +48,29 @@ export default function LotesPage() {
 
   const isAdmin = user?.role === 'ADMIN';
 
+  // Redirecionar se nao tiver operador selecionado (exceto admin mode)
+  useEffect(() => {
+    if (!operator && !isAdminMode && !loading) {
+      router.push('/funcoes');
+    }
+  }, [operator, isAdminMode, loading, router]);
+
   const loadData = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     try {
-      if (isAdmin) {
+      if (isAdminMode) {
+        // Admin mode - ver todos os lotes
         const data = await getAllLots();
         setLots(data);
-      } else {
-        // Buscar lotes criados pelo usuario + lotes atribuidos a ele + lotes abertos
-        const [ownLots, assignedLots, openLots] = await Promise.all([
-          getLotsByUser(user.uid),
-          getAssignedLotsGeneral(user.uid),
+      } else if (operator) {
+        // Modo operador - buscar lotes do operador + lotes abertos
+        const [operatorLots, openLots] = await Promise.all([
+          getLotsByOperator(operator.code),
           getOpenAdminLots(),
         ]);
         // Combinar e remover duplicatas
-        const allLots = [...ownLots];
-        for (const lot of assignedLots) {
-          if (!allLots.find((l) => l.id === lot.id)) {
-            allLots.push(lot);
-          }
-        }
+        const allLots = [...operatorLots];
         for (const lot of openLots) {
           if (!allLots.find((l) => l.id === lot.id)) {
             allLots.push(lot);
@@ -85,7 +89,7 @@ export default function LotesPage() {
     } finally {
       setLoading(false);
     }
-  }, [user, isAdmin]);
+  }, [user, operator, isAdminMode]);
 
   useEffect(() => {
     loadData();
