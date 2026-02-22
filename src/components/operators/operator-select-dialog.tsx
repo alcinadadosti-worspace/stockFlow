@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { getActiveOperators } from '@/services/firestore/operators';
+import { getActiveOperators, seedDefaultOperators } from '@/services/firestore/operators';
 import { useOperator } from '@/hooks/useOperator';
 import { useSound } from '@/hooks/useSound';
 import type { Operator } from '@/types';
@@ -53,6 +53,9 @@ export function OperatorSelectDialog({
   async function loadOperators() {
     setLoading(true);
     try {
+      // Seed operadores padrão se não existirem
+      await seedDefaultOperators();
+
       const data = await getActiveOperators();
       setOperators(data);
     } catch (err) {

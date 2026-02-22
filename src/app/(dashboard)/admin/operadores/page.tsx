@@ -50,7 +50,7 @@ type OperatorForm = z.infer<typeof operatorSchema>;
 
 export default function AdminOperadoresPage() {
   const router = useRouter();
-  const { operator, isAdminMode } = useOperator();
+  const { isAdminMode } = useOperator();
   const [operators, setOperators] = useState<Operator[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -91,8 +91,23 @@ export default function AdminOperadoresPage() {
   }, []);
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    if (isAdminMode) {
+      loadData();
+    }
+  }, [loadData, isAdminMode]);
+
+  // Bloquear renderização se não for admin
+  if (!isAdminMode) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <Users className="mx-auto mb-4 h-12 w-12 text-muted-foreground/50" />
+          <p className="text-muted-foreground">Acesso restrito</p>
+          <p className="text-sm text-muted-foreground">Redirecionando...</p>
+        </div>
+      </div>
+    );
+  }
 
   function openCreate() {
     setEditingOperator(null);
