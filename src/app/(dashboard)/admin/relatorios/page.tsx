@@ -1,9 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { getAllUsers } from '@/services/firestore/users';
 import { getAllTaskLogs } from '@/services/firestore/taskLogs';
 import { getAllLots } from '@/services/firestore/lots';
+import { useOperator } from '@/hooks/useOperator';
 import type { AppUser, TaskLog, Lot } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -24,10 +26,19 @@ import {
 import { calculateLevel, formatDuration } from '@/lib/utils';
 
 export default function RelatoriosPage() {
+  const router = useRouter();
+  const { operator, isAdminMode } = useOperator();
   const [users, setUsers] = useState<AppUser[]>([]);
   const [taskLogs, setTaskLogs] = useState<TaskLog[]>([]);
   const [lots, setLots] = useState<Lot[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Proteger pagina - apenas admin mode
+  useEffect(() => {
+    if (operator && !isAdminMode) {
+      router.push('/funcoes');
+    }
+  }, [operator, isAdminMode, router]);
   const [selectedUser, setSelectedUser] = useState<string>('all');
 
   useEffect(() => {

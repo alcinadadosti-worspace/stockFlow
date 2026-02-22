@@ -3,11 +3,13 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { useOperator } from '@/hooks/useOperator';
 import { useSound } from '@/hooks/useSound';
 import {
   getLot,
   getLotOrders,
   startLot,
+  startLotWithOperator,
   closeLotForSeparator,
 } from '@/services/firestore/lots';
 import type { Lot, LotOrder } from '@/types';
@@ -80,8 +82,16 @@ export default function SeparadorLotDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { user } = useAuth();
+  const { operator, isAdminMode } = useOperator();
   const { playSound } = useSound();
   const lotId = params.lotId as string;
+
+  // Redirect if no operator selected
+  useEffect(() => {
+    if (!operator && !isAdminMode) {
+      router.push('/funcoes');
+    }
+  }, [operator, isAdminMode, router]);
 
   const [lot, setLot] = useState<Lot | null>(null);
   const [orders, setOrders] = useState<LotOrder[]>([]);
@@ -112,7 +122,11 @@ export default function SeparadorLotDetailPage() {
   async function handleStart() {
     setActionLoading(true);
     try {
-      await startLot(lotId);
+      if (operator) {
+        await startLotWithOperator(lotId, operator.code, operator.name);
+      } else {
+        await startLot(lotId);
+      }
       playSound('lot-started');
       toast.success('Separacao iniciada! Bom trabalho!');
       await loadData();

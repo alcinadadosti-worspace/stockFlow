@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { taskTypeSchema, type TaskTypeForm } from '@/lib/schemas';
@@ -10,6 +11,7 @@ import {
   updateTaskType,
   deleteTaskType,
 } from '@/services/firestore/taskTypes';
+import { useOperator } from '@/hooks/useOperator';
 import type { TaskType } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -38,6 +40,8 @@ import { Settings, Plus, Pencil, Trash2, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function AdminTarefasPage() {
+  const router = useRouter();
+  const { operator, isAdminMode } = useOperator();
   const [tasks, setTasks] = useState<TaskType[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -45,6 +49,13 @@ export default function AdminTarefasPage() {
   const [editingTask, setEditingTask] = useState<TaskType | null>(null);
   const [deletingTask, setDeletingTask] = useState<TaskType | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Proteger pagina - apenas admin mode
+  useEffect(() => {
+    if (operator && !isAdminMode) {
+      router.push('/funcoes');
+    }
+  }, [operator, isAdminMode, router]);
 
   const form = useForm<TaskTypeForm>({
     resolver: zodResolver(taskTypeSchema),

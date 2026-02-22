@@ -1,10 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { pickingRulesSchema, type PickingRulesForm } from '@/lib/schemas';
 import { getPickingRules, updatePickingRules } from '@/services/firestore/pickingRules';
+import { useOperator } from '@/hooks/useOperator';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,8 +17,17 @@ import { Sliders, Save, Info } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function RegrasXpPage() {
+  const router = useRouter();
+  const { operator, isAdminMode } = useOperator();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  // Proteger pagina - apenas admin mode
+  useEffect(() => {
+    if (operator && !isAdminMode) {
+      router.push('/funcoes');
+    }
+  }, [operator, isAdminMode, router]);
 
   const form = useForm<PickingRulesForm>({
     resolver: zodResolver(pickingRulesSchema),

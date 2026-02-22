@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { useOperator } from '@/hooks/useOperator';
 import { useSound } from '@/hooks/useSound';
 import {
   getSingleOrder,
@@ -10,6 +11,7 @@ import {
   endSingleOrderSeparation,
   startSingleOrderScanning,
   sealSingleOrder,
+  sealSingleOrderWithOperator,
 } from '@/services/firestore/singleOrders';
 import type { SingleOrder } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -96,8 +98,16 @@ export default function PedidoAvulsoDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { user } = useAuth();
+  const { operator, isAdminMode } = useOperator();
   const { playSound } = useSound();
   const orderId = params.orderId as string;
+
+  // Redirect if no operator selected
+  useEffect(() => {
+    if (!operator && !isAdminMode) {
+      router.push('/funcoes');
+    }
+  }, [operator, isAdminMode, router]);
 
   const [order, setOrder] = useState<SingleOrder | null>(null);
   const [loading, setLoading] = useState(true);
@@ -187,7 +197,13 @@ export default function PedidoAvulsoDetailPage() {
     setSealError('');
     setActionLoading(true);
     try {
-      const result = await sealSingleOrder(orderId, code);
+      let result;
+      if (operator) {
+        result = await sealSingleOrderWithOperator(orderId, code);
+      } else {
+        result = await sealSingleOrder(orderId, code);
+      }
+
       if (!result.success) {
         setSealError(result.error || 'Erro ao encerrar pedido.');
         playSound('error');

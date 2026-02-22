@@ -15,6 +15,7 @@ import {
 import { getFirebaseDb } from '@/lib/firebase';
 import type { SingleOrder, SingleOrderStatus } from '@/types';
 import { incrementUserXp, decrementUserXp, updateUserStreak } from './users';
+import { incrementOperatorXp, decrementOperatorXp, updateOperatorStreak } from './operators';
 import { getPickingRules } from './pickingRules';
 import { checkOrderCodeExists } from './lots';
 
@@ -228,8 +229,164 @@ export async function deleteSingleOrder(id: string): Promise<void> {
 
   await batch.commit();
 
-  // Remover XP do usuario (apos o batch para garantir que o pedido foi deletado)
+  // Remover XP do usuario ou operador (apos o batch para garantir que o pedido foi deletado)
   if (order.status === 'DONE' && order.xpEarned && order.xpEarned > 0) {
-    await decrementUserXp(order.createdByUid, order.xpEarned);
+    if (order.operatorCode) {
+      await decrementOperatorXp(order.operatorCode, order.xpEarned);
+    } else {
+      await decrementUserXp(order.createdByUid, order.xpEarned);
+    }
+  }
+}
+
+// ============ FUNCOES COM OPERADOR ============
+
+// Cria um novo pedido avulso com operador
+export async function createSingleOrderWithOperator(
+  orderCode: string,
+  items: number,
+  createdByUid: string,
+  createdByName: string,
+  operatorCode: string,
+  operatorName: string,
+): Promise<string> {
+  try {
+    // Validar se o codigo do pedido ja existe
+    const orderExists = await checkOrderCodeExists(orderCode);
+    if (orderExists.exists) {
+      throw new Error(`Pedido ${orderCode} duplicado! Ja existe no ${orderExists.lotCode}.`);
+    }
+  } catch (error) {
+    // Se for nosso erro de duplicacao, repassar
+    if (error instanceof Error && error.message.includes('duplicado')) {
+      throw error;
+    }
+    // Outros erros (Firebase), ignorar verificacao
+    console.warn('Erro ao verificar duplicado:', error);
+  }
+
+  const id = generateSingleOrderId();
+  const now = Timestamp.now();
+
+  await setDoc(doc(getFirebaseDb(), 'singleOrders', id), {
+    orderCode,
+    items,
+    createdByUid,
+    createdByName,
+    operatorCode,
+    operatorName,
+    status: 'DRAFT' as SingleOrderStatus,
+    createdAt: now,
+    separationStartAt: null,
+    separationEndAt: null,
+    scanStartAt: null,
+    scanEndAt: null,
+    separationDurationMs: 0,
+    scanDurationMs: 0,
+    totalDurationMs: 0,
+    sealedCode: null,
+    xpEarned: 0,
+  });
+
+  return id;
+}
+
+// Busca pedidos avulsos do operador
+export async function getSingleOrdersByOperator(operatorCode: string): Promise<SingleOrder[]> {
+  const q = query(
+    collection(getFirebaseDb(), 'singleOrders'),
+    where('operatorCode', '==', operatorCode),
+  );
+  const snap = await getDocs(q);
+  const orders = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as SingleOrder);
+  // Ordenar por createdAt (mais recente primeiro)
+  return orders.sort((a, b) => {
+    const aTime = a.createdAt?.toMillis() || 0;
+    const bTime = b.createdAt?.toMillis() || 0;
+    return bTime - aTime;
+  });
+}
+
+// Encerra o pedido avulso com lacre (modo operador - XP vai para operador)
+export async function sealSingleOrderWithOperator(
+  id: string,
+  sealedCode: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await runTransaction(getFirebaseDb(), async (transaction) => {
+      // Verificar se lacre ja foi usado
+      const sealRef = doc(getFirebaseDb(), 'sealedCodes', sealedCode);
+      const sealSnap = await transaction.get(sealRef);
+      if (sealSnap.exists()) {
+        throw new Error(`Lacre ${sealedCode} duplicado! Ja foi usado no pedido ${sealSnap.data().orderCode}.`);
+      }
+
+      const orderRef = doc(getFirebaseDb(), 'singleOrders', id);
+      const orderSnap = await transaction.get(orderRef);
+      if (!orderSnap.exists()) {
+        throw new Error('Pedido nao encontrado.');
+      }
+
+      const order = orderSnap.data();
+      if (order.status === 'DONE') {
+        throw new Error('Pedido ja foi encerrado.');
+      }
+
+      const now = Timestamp.now();
+      const scanStartMs = order.scanStartAt?.toMillis() || now.toMillis();
+      const scanEndMs = now.toMillis();
+      const scanDurationMs = scanEndMs - scanStartMs;
+
+      // Tempo geral = separacao + bipagem
+      const separationDurationMs = order.separationDurationMs || 0;
+      const totalDurationMs = separationDurationMs + scanDurationMs;
+
+      // Calcular XP (usando mesma formula de lotes, mas para 1 pedido)
+      const rules = await getPickingRules();
+      const baseXp = rules.xpBasePerLot || 50;
+      const orderXp = rules.xpPerOrder || 10;
+      const itemXp = (rules.xpPerItem || 2) * order.items;
+      let xpTotal = baseXp + orderXp + itemXp;
+
+      // Bonus por velocidade (itens por minuto)
+      const totalMinutes = totalDurationMs / 60000;
+      const itemsPerMin = totalMinutes > 0 ? order.items / totalMinutes : 0;
+      const speedTarget = rules.speedTargetItemsPerMin || 5;
+
+      if (itemsPerMin >= speedTarget * (rules.bonus20Threshold || 1.2)) {
+        xpTotal = Math.round(xpTotal * 1.2);
+      } else if (itemsPerMin >= speedTarget * (rules.bonus10Threshold || 1.0)) {
+        xpTotal = Math.round(xpTotal * 1.1);
+      }
+
+      transaction.update(orderRef, {
+        status: 'DONE' as SingleOrderStatus,
+        sealedCode,
+        scanEndAt: now,
+        scanDurationMs,
+        totalDurationMs,
+        xpEarned: xpTotal,
+      });
+
+      // Registrar lacre globalmente
+      transaction.set(sealRef, {
+        sealedCode,
+        orderCode: order.orderCode,
+        singleOrderId: id,
+        createdAt: now,
+      });
+    });
+
+    // Atribuir XP ao operador (fora da transacao)
+    const updatedOrder = await getSingleOrder(id);
+    if (updatedOrder && updatedOrder.xpEarned && updatedOrder.operatorCode) {
+      await incrementOperatorXp(updatedOrder.operatorCode, updatedOrder.xpEarned);
+      await updateOperatorStreak(updatedOrder.operatorCode);
+    }
+
+    return { success: true };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Erro ao encerrar pedido.';
+    return { success: false, error: message };
   }
 }

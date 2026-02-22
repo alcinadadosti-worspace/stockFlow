@@ -3,7 +3,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
-import { getSingleOrdersByUser, createSingleOrder, deleteSingleOrder } from '@/services/firestore/singleOrders';
+import { useOperator } from '@/hooks/useOperator';
+import { getSingleOrdersByUser, getSingleOrdersByOperator, createSingleOrder, createSingleOrderWithOperator, deleteSingleOrder } from '@/services/firestore/singleOrders';
 import { parseSingleOrderSpreadsheet } from '@/lib/spreadsheet';
 import type { SingleOrder } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -73,6 +74,7 @@ function getStatusIcon(status: string) {
 
 export default function PedidoAvulsoPage() {
   const { user } = useAuth();
+  const { operator, isAdminMode } = useOperator();
   const router = useRouter();
   const [orders, setOrders] = useState<SingleOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -87,18 +89,30 @@ export default function PedidoAvulsoPage() {
   const [fileName, setFileName] = useState('');
   const [deleting, setDeleting] = useState<string | null>(null);
 
+  // Redirect if no operator selected
+  useEffect(() => {
+    if (!operator && !isAdminMode && !loading) {
+      router.push('/funcoes');
+    }
+  }, [operator, isAdminMode, loading, router]);
+
   const loadData = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     try {
-      const data = await getSingleOrdersByUser(user.uid);
-      setOrders(data);
+      if (operator) {
+        const data = await getSingleOrdersByOperator(operator.code);
+        setOrders(data);
+      } else {
+        const data = await getSingleOrdersByUser(user.uid);
+        setOrders(data);
+      }
     } catch (err) {
       console.error('Erro ao carregar pedidos:', err);
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, operator]);
 
   useEffect(() => {
     loadData();
@@ -160,7 +174,19 @@ export default function PedidoAvulsoPage() {
 
     setCreating(true);
     try {
-      const id = await createSingleOrder(orderCode.trim(), itemsNum, user.uid, user.name);
+      let id: string;
+      if (operator) {
+        id = await createSingleOrderWithOperator(
+          orderCode.trim(),
+          itemsNum,
+          user.uid,
+          user.name,
+          operator.code,
+          operator.name,
+        );
+      } else {
+        id = await createSingleOrder(orderCode.trim(), itemsNum, user.uid, user.name);
+      }
       toast.success('Pedido criado!');
       setShowCreate(false);
       resetDialog();
@@ -178,7 +204,19 @@ export default function PedidoAvulsoPage() {
 
     setCreating(true);
     try {
-      const id = await createSingleOrder(importedData.orderCode, importedData.items, user.uid, user.name);
+      let id: string;
+      if (operator) {
+        id = await createSingleOrderWithOperator(
+          importedData.orderCode,
+          importedData.items,
+          user.uid,
+          user.name,
+          operator.code,
+          operator.name,
+        );
+      } else {
+        id = await createSingleOrder(importedData.orderCode, importedData.items, user.uid, user.name);
+      }
       toast.success('Pedido criado!');
       setShowCreate(false);
       resetDialog();

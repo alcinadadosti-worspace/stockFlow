@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { getAllUsers, updateUserRole } from '@/services/firestore/users';
+import { useOperator } from '@/hooks/useOperator';
 import type { AppUser, UserRole } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -12,8 +14,17 @@ import { toast } from 'sonner';
 import { calculateLevel, formatDateBR } from '@/lib/utils';
 
 export default function AdminUsuariosPage() {
+  const router = useRouter();
+  const { operator, isAdminMode } = useOperator();
   const [users, setUsers] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Proteger pagina - apenas admin mode
+  useEffect(() => {
+    if (operator && !isAdminMode) {
+      router.push('/funcoes');
+    }
+  }, [operator, isAdminMode, router]);
 
   useEffect(() => {
     loadData();

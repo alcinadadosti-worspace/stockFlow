@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -10,6 +11,7 @@ import {
   updateOperator,
   deleteOperator,
 } from '@/services/firestore/operators';
+import { useOperator } from '@/hooks/useOperator';
 import type { Operator } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -46,6 +48,8 @@ const operatorSchema = z.object({
 type OperatorForm = z.infer<typeof operatorSchema>;
 
 export default function AdminOperadoresPage() {
+  const router = useRouter();
+  const { operator, isAdminMode } = useOperator();
   const [operators, setOperators] = useState<Operator[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -53,6 +57,13 @@ export default function AdminOperadoresPage() {
   const [editingOperator, setEditingOperator] = useState<Operator | null>(null);
   const [deletingOperator, setDeletingOperator] = useState<Operator | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Proteger pagina - apenas admin mode
+  useEffect(() => {
+    if (operator && !isAdminMode) {
+      router.push('/funcoes');
+    }
+  }, [operator, isAdminMode, router]);
 
   const form = useForm<OperatorForm>({
     resolver: zodResolver(operatorSchema),

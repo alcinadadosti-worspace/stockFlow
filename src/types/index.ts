@@ -200,6 +200,9 @@ export interface SingleOrder {
   items: number;
   createdByUid: string;
   createdByName?: string;
+  // Operador (modo terminal compartilhado)
+  operatorCode?: string;
+  operatorName?: string;
   status: SingleOrderStatus;
   // Timestamps
   createdAt: Timestamp;

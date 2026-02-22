@@ -3,7 +3,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
-import { getLotsReadyForScan, getLotsByScanner, claimLotForScanning, getAssignedLotsScanner } from '@/services/firestore/lots';
+import { useOperator } from '@/hooks/useOperator';
+import { getLotsReadyForScan, getLotsByScanner, claimLotForScanning, claimLotForScanningWithOperator, getAssignedLotsScanner, getLotsByScannerOperator, getOpenAdminLots } from '@/services/firestore/lots';
 import type { Lot } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -36,57 +37,89 @@ function getStatusIcon(status: string) {
 
 export default function BipadorPage() {
   const { user } = useAuth();
+  const { operator, isAdminMode } = useOperator();
   const router = useRouter();
   const [availableLots, setAvailableLots] = useState<Lot[]>([]);
   const [myLots, setMyLots] = useState<Lot[]>([]);
   const [loading, setLoading] = useState(true);
   const [claiming, setClaiming] = useState<string | null>(null);
 
+  // Redirect if no operator selected
+  useEffect(() => {
+    if (!operator && !isAdminMode && !loading) {
+      router.push('/funcoes');
+    }
+  }, [operator, isAdminMode, loading, router]);
+
   const loadData = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     try {
-      const [available, mine, assigned] = await Promise.all([
-        getLotsReadyForScan(),
-        getLotsByScanner(user.uid),
-        getAssignedLotsScanner(user.uid),
-      ]);
+      if (operator) {
+        // Modo operador
+        const [available, mine, openLots] = await Promise.all([
+          getLotsReadyForScan(),
+          getLotsByScannerOperator(operator.code),
+          getOpenAdminLots(),
+        ]);
 
-      // Lotes disponiveis: apenas READY_FOR_SCAN (separador ja finalizou)
-      // Bipador so pode ver/assumir lotes depois que o separador terminar
-      const assignedReadyForScan = assigned.filter(
-        (l) => l.status === 'READY_FOR_SCAN'
-      );
-      const allAvailable = [...available];
-      for (const lot of assignedReadyForScan) {
-        if (!allAvailable.find((l) => l.id === lot.id)) {
-          allAvailable.push(lot);
+        // Lotes disponiveis: READY_FOR_SCAN + lotes abertos do admin
+        const allAvailable = [...available];
+        for (const lot of openLots) {
+          if (lot.status === 'READY_FOR_SCAN' && !allAvailable.find((l) => l.id === lot.id)) {
+            allAvailable.push(lot);
+          }
         }
-      }
 
-      // Meus lotes: ja peguei ou atribuidos em andamento
-      const assignedInProgress = assigned.filter(
-        (l) => l.status === 'CLOSING' || l.status === 'DONE'
-      );
-      const allMine = [...mine];
-      for (const lot of assignedInProgress) {
-        if (!allMine.find((l) => l.id === lot.id)) {
-          allMine.push(lot);
+        // Ordenar
+        allAvailable.sort((a, b) => (a.endAt?.toMillis() || 0) - (b.endAt?.toMillis() || 0));
+        mine.sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
+
+        setAvailableLots(allAvailable);
+        setMyLots(mine);
+      } else {
+        // Modo tradicional
+        const [available, mine, assigned] = await Promise.all([
+          getLotsReadyForScan(),
+          getLotsByScanner(user.uid),
+          getAssignedLotsScanner(user.uid),
+        ]);
+
+        // Lotes disponiveis: apenas READY_FOR_SCAN (separador ja finalizou)
+        const assignedReadyForScan = assigned.filter(
+          (l) => l.status === 'READY_FOR_SCAN'
+        );
+        const allAvailable = [...available];
+        for (const lot of assignedReadyForScan) {
+          if (!allAvailable.find((l) => l.id === lot.id)) {
+            allAvailable.push(lot);
+          }
         }
+
+        // Meus lotes: ja peguei ou atribuidos em andamento
+        const assignedInProgress = assigned.filter(
+          (l) => l.status === 'CLOSING' || l.status === 'DONE'
+        );
+        const allMine = [...mine];
+        for (const lot of assignedInProgress) {
+          if (!allMine.find((l) => l.id === lot.id)) {
+            allMine.push(lot);
+          }
+        }
+
+        // Ordenar
+        allAvailable.sort((a, b) => (a.endAt?.toMillis() || 0) - (b.endAt?.toMillis() || 0));
+        allMine.sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
+
+        setAvailableLots(allAvailable);
+        setMyLots(allMine);
       }
-
-      // Ordenar
-      allAvailable.sort((a, b) => (a.endAt?.toMillis() || 0) - (b.endAt?.toMillis() || 0));
-      allMine.sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
-
-      setAvailableLots(allAvailable);
-      setMyLots(allMine);
     } catch (err) {
       console.error('Erro ao carregar lotes:', err);
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, operator]);
 
   useEffect(() => {
     loadData();
@@ -96,7 +129,11 @@ export default function BipadorPage() {
     if (!user) return;
     setClaiming(lot.id);
     try {
-      await claimLotForScanning(lot.id, user.uid, user.name);
+      if (operator) {
+        await claimLotForScanningWithOperator(lot.id, operator.code, operator.name);
+      } else {
+        await claimLotForScanning(lot.id, user.uid, user.name);
+      }
       toast.success('Lote assumido! Voce pode iniciar a bipagem.');
       router.push(`/bipador/${lot.id}`);
     } catch (err) {

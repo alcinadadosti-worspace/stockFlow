@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { useOperator } from '@/hooks/useOperator';
 import { getAllLots, createAdminLot, deleteLot } from '@/services/firestore/lots';
 import { getAllUsers } from '@/services/firestore/users';
 import { parseSpreadsheet } from '@/lib/spreadsheet';
@@ -75,10 +76,18 @@ function getStatusIcon(status: string) {
 
 export default function AdminLotesPage() {
   const { user } = useAuth();
+  const { operator, isAdminMode } = useOperator();
   const router = useRouter();
   const [lots, setLots] = useState<Lot[]>([]);
   const [users, setUsers] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Proteger pagina - apenas admin mode
+  useEffect(() => {
+    if (operator && !isAdminMode) {
+      router.push('/funcoes');
+    }
+  }, [operator, isAdminMode, router]);
   const [showCreate, setShowCreate] = useState(false);
 
   // Form state

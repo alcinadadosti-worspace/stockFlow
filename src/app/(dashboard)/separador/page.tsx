@@ -3,7 +3,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
-import { getLotsByUser, getAssignedLotsSeparator } from '@/services/firestore/lots';
+import { useOperator } from '@/hooks/useOperator';
+import { getLotsByUser, getAssignedLotsSeparator, getLotsByOperator, getOpenAdminLots } from '@/services/firestore/lots';
 import type { Lot } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -39,44 +40,69 @@ function getStatusIcon(status: string) {
 
 export default function SeparadorPage() {
   const { user } = useAuth();
+  const { operator, isAdminMode } = useOperator();
   const router = useRouter();
   const [lots, setLots] = useState<Lot[]>([]);
   const [loading, setLoading] = useState(true);
   const [showImport, setShowImport] = useState(false);
 
+  // Redirecionar se nao tiver operador
+  useEffect(() => {
+    if (!operator && !isAdminMode && !loading) {
+      router.push('/funcoes');
+    }
+  }, [operator, isAdminMode, loading, router]);
+
   const loadData = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     try {
-      // Buscar lotes criados pelo usuario + lotes atribuidos como separador
-      const [ownLots, assignedLots] = await Promise.all([
-        getLotsByUser(user.uid),
-        getAssignedLotsSeparator(user.uid),
-      ]);
-      // Filtrar lotes proprios do modo SEPARADOR
-      const ownSeparatorLots = ownLots.filter(
-        (l) => l.workMode === 'SEPARADOR' || !l.workMode
-      );
-      // Combinar e remover duplicatas
-      const allLots = [...ownSeparatorLots];
-      for (const lot of assignedLots) {
-        if (!allLots.find((l) => l.id === lot.id)) {
-          allLots.push(lot);
+      if (operator) {
+        // Modo operador
+        const [operatorLots, openLots] = await Promise.all([
+          getLotsByOperator(operator.code),
+          getOpenAdminLots(),
+        ]);
+        const allLots = [...operatorLots.filter((l) => l.workMode === 'SEPARADOR')];
+        for (const lot of openLots) {
+          if (!allLots.find((l) => l.id === lot.id)) {
+            allLots.push(lot);
+          }
         }
+        allLots.sort((a, b) => {
+          const aTime = a.createdAt?.toMillis() || 0;
+          const bTime = b.createdAt?.toMillis() || 0;
+          return bTime - aTime;
+        });
+        setLots(allLots);
+      } else {
+        // Modo tradicional
+        const [ownLots, assignedLots] = await Promise.all([
+          getLotsByUser(user.uid),
+          getAssignedLotsSeparator(user.uid),
+        ]);
+        const ownSeparatorLots = ownLots.filter(
+          (l) => l.workMode === 'SEPARADOR' || !l.workMode
+        );
+        const allLots = [...ownSeparatorLots];
+        for (const lot of assignedLots) {
+          if (!allLots.find((l) => l.id === lot.id)) {
+            allLots.push(lot);
+          }
+        }
+        allLots.sort((a, b) => {
+          const aTime = a.createdAt?.toMillis() || 0;
+          const bTime = b.createdAt?.toMillis() || 0;
+          return bTime - aTime;
+        });
+        setLots(allLots);
       }
-      // Ordenar por createdAt desc
-      allLots.sort((a, b) => {
-        const aTime = a.createdAt?.toMillis() || 0;
-        const bTime = b.createdAt?.toMillis() || 0;
-        return bTime - aTime;
-      });
-      setLots(allLots);
     } catch (err) {
       console.error('Erro ao carregar lotes:', err);
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, operator]);
 
   useEffect(() => {
     loadData();

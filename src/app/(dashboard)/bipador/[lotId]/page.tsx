@@ -3,12 +3,14 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { useOperator } from '@/hooks/useOperator';
 import { useSound } from '@/hooks/useSound';
 import {
   getLot,
   getLotOrders,
   sealOrder,
   completeLot,
+  completeLotWithOperator,
   checkAllOrdersSealed,
   startScanning,
 } from '@/services/firestore/lots';
@@ -91,8 +93,16 @@ export default function BipadorLotDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { user } = useAuth();
+  const { operator, isAdminMode } = useOperator();
   const { playSound } = useSound();
   const lotId = params.lotId as string;
+
+  // Redirect if no operator selected
+  useEffect(() => {
+    if (!operator && !isAdminMode) {
+      router.push('/funcoes');
+    }
+  }, [operator, isAdminMode, router]);
 
   const [lot, setLot] = useState<Lot | null>(null);
   const [orders, setOrders] = useState<LotOrder[]>([]);
@@ -191,7 +201,11 @@ export default function BipadorLotDetailPage() {
       // Check if all sealed
       const allSealed = await checkAllOrdersSealed(lotId);
       if (allSealed) {
-        await completeLot(lotId);
+        if (operator) {
+          await completeLotWithOperator(lotId);
+        } else {
+          await completeLot(lotId);
+        }
         playSound('lot-finished');
         toast.success('Lote concluido! Parabens!');
         confetti({

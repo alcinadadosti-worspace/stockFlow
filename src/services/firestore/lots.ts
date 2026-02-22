@@ -865,3 +865,18 @@ export async function getLotsByOperator(operatorCode: string): Promise<Lot[]> {
     return bTime - aTime;
   });
 }
+
+// Buscar lotes pelo operador bipador
+export async function getLotsByScannerOperator(operatorCode: string): Promise<Lot[]> {
+  const q = query(
+    collection(getFirebaseDb(), 'lots'),
+    where('scannerOperatorCode', '==', operatorCode),
+  );
+  const snap = await getDocs(q);
+  const lots = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Lot);
+  return lots.sort((a, b) => {
+    const aTime = a.createdAt?.toMillis() || 0;
+    const bTime = b.createdAt?.toMillis() || 0;
+    return bTime - aTime;
+  });
+}
