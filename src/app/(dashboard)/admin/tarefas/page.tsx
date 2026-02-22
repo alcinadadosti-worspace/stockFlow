@@ -50,12 +50,12 @@ export default function AdminTarefasPage() {
   const [deletingTask, setDeletingTask] = useState<TaskType | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // Proteger pagina - apenas admin mode
+  // Proteger pagina - SEMPRE requer PIN admin
   useEffect(() => {
-    if (operator && !isAdminMode) {
+    if (!isAdminMode) {
       router.push('/funcoes');
     }
-  }, [operator, isAdminMode, router]);
+  }, [isAdminMode, router]);
 
   const form = useForm<TaskTypeForm>({
     resolver: zodResolver(taskTypeSchema),

@@ -10,6 +10,7 @@ import {
   createOperator,
   updateOperator,
   deleteOperator,
+  seedDefaultOperators,
 } from '@/services/firestore/operators';
 import { useOperator } from '@/hooks/useOperator';
 import type { Operator } from '@/types';
@@ -58,12 +59,12 @@ export default function AdminOperadoresPage() {
   const [deletingOperator, setDeletingOperator] = useState<Operator | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // Proteger pagina - apenas admin mode
+  // Proteger pagina - SEMPRE requer PIN admin
   useEffect(() => {
-    if (operator && !isAdminMode) {
+    if (!isAdminMode) {
       router.push('/funcoes');
     }
-  }, [operator, isAdminMode, router]);
+  }, [isAdminMode, router]);
 
   const form = useForm<OperatorForm>({
     resolver: zodResolver(operatorSchema),
@@ -73,6 +74,12 @@ export default function AdminOperadoresPage() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
+      // Seed operadores padrão se não existirem
+      const seedResult = await seedDefaultOperators();
+      if (seedResult.created.length > 0) {
+        toast.success(`Operadores criados: ${seedResult.created.join(', ')}`);
+      }
+
       const data = await getAllOperators();
       setOperators(data);
     } catch (err) {

@@ -22,12 +22,12 @@ export default function RegrasXpPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // Proteger pagina - apenas admin mode
+  // Proteger pagina - SEMPRE requer PIN admin
   useEffect(() => {
-    if (operator && !isAdminMode) {
+    if (!isAdminMode) {
       router.push('/funcoes');
     }
-  }, [operator, isAdminMode, router]);
+  }, [isAdminMode, router]);
 
   const form = useForm<PickingRulesForm>({
     resolver: zodResolver(pickingRulesSchema),

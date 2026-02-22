@@ -135,3 +135,34 @@ export async function checkOperatorCodeExists(code: string): Promise<boolean> {
   const snap = await getDoc(doc(getFirebaseDb(), COLLECTION, code));
   return snap.exists();
 }
+
+// Seed de operadores padrão
+const DEFAULT_OPERATORS = [
+  { code: '77', name: 'Hugo Castro' },
+  { code: '33', name: 'João Victor' },
+  { code: '44', name: 'Pedro Lucas' },
+];
+
+export async function seedDefaultOperators(): Promise<{ created: string[]; existing: string[] }> {
+  const created: string[] = [];
+  const existing: string[] = [];
+
+  for (const op of DEFAULT_OPERATORS) {
+    const exists = await checkOperatorCodeExists(op.code);
+    if (exists) {
+      existing.push(op.code);
+    } else {
+      await setDoc(doc(getFirebaseDb(), COLLECTION, op.code), {
+        code: op.code,
+        name: op.name,
+        active: true,
+        xpTotal: 0,
+        streak: 0,
+        createdAt: Timestamp.now(),
+      });
+      created.push(op.code);
+    }
+  }
+
+  return { created, existing };
+}
