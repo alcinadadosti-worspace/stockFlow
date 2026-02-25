@@ -28,13 +28,14 @@ export async function getAllOperators(): Promise<Operator[]> {
 
 // Busca operadores ativos
 export async function getActiveOperators(): Promise<Operator[]> {
+  // Buscar todos e filtrar no cliente para evitar necessidade de indice composto
   const q = query(
     collection(getFirebaseDb(), COLLECTION),
-    where('active', '==', true),
     orderBy('code', 'asc'),
   );
   const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ ...d.data() }) as Operator);
+  const all = snap.docs.map((d) => ({ ...d.data() }) as Operator);
+  return all.filter((op) => op.active === true);
 }
 
 // Busca operador por código

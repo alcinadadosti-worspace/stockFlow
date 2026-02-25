@@ -5,9 +5,9 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useOperator } from '@/hooks/useOperator';
 import { getAllLots, createAdminLot, deleteLot } from '@/services/firestore/lots';
-import { getAllUsers } from '@/services/firestore/users';
+import { getActiveOperators, seedDefaultOperators } from '@/services/firestore/operators';
 import { parseSpreadsheet } from '@/lib/spreadsheet';
-import type { Lot, AppUser, ParsedOrder, LotAssignmentType } from '@/types';
+import type { Lot, Operator, ParsedOrder, LotAssignmentType } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -79,7 +79,7 @@ export default function AdminLotesPage() {
   const { isAdminMode } = useOperator();
   const router = useRouter();
   const [lots, setLots] = useState<Lot[]>([]);
-  const [users, setUsers] = useState<AppUser[]>([]);
+  const [operators, setOperators] = useState<Operator[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Proteger pagina - SEMPRE requer PIN admin
@@ -97,22 +97,24 @@ export default function AdminLotesPage() {
   const [fileName, setFileName] = useState('');
   const [lotCode, setLotCode] = useState('');
   const [assignmentType, setAssignmentType] = useState<LotAssignmentType>('OPEN');
-  const [assignedGeneralUid, setAssignedGeneralUid] = useState('');
-  const [assignedSeparatorUid, setAssignedSeparatorUid] = useState('');
-  const [assignedScannerUid, setAssignedScannerUid] = useState('');
+  const [assignedGeneralCode, setAssignedGeneralCode] = useState('');
+  const [assignedSeparatorCode, setAssignedSeparatorCode] = useState('');
+  const [assignedScannerCode, setAssignedScannerCode] = useState('');
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [lotsData, usersData] = await Promise.all([
+      // Seed operadores padrao se nao existirem
+      await seedDefaultOperators();
+
+      const [lotsData, operatorsData] = await Promise.all([
         getAllLots(),
-        getAllUsers(),
+        getActiveOperators(),
       ]);
       setLots(lotsData);
-      // Filtrar apenas estoquistas e admins ativos
-      setUsers(usersData);
+      setOperators(operatorsData);
     } catch (err) {
       console.error('Erro ao carregar dados:', err);
     } finally {
@@ -161,9 +163,9 @@ export default function AdminLotesPage() {
     setFileName('');
     setLotCode('');
     setAssignmentType('OPEN');
-    setAssignedGeneralUid('');
-    setAssignedSeparatorUid('');
-    setAssignedScannerUid('');
+    setAssignedGeneralCode('');
+    setAssignedSeparatorCode('');
+    setAssignedScannerCode('');
   }
 
   async function handleCreate() {
@@ -174,17 +176,17 @@ export default function AdminLotesPage() {
     }
 
     // Validar atribuicoes
-    if (assignmentType === 'ASSIGNED_GENERAL' && !assignedGeneralUid) {
-      toast.error('Selecione um usuario para a funcao geral');
+    if (assignmentType === 'ASSIGNED_GENERAL' && !assignedGeneralCode) {
+      toast.error('Selecione um operador para a funcao geral');
       return;
     }
     if (assignmentType === 'ASSIGNED_SEPARATED') {
-      if (!assignedSeparatorUid) {
-        toast.error('Selecione um usuario separador');
+      if (!assignedSeparatorCode) {
+        toast.error('Selecione um operador separador');
         return;
       }
-      if (!assignedScannerUid) {
-        toast.error('Selecione um usuario bipador');
+      if (!assignedScannerCode) {
+        toast.error('Selecione um operador bipador');
         return;
       }
     }
@@ -193,9 +195,9 @@ export default function AdminLotesPage() {
     setStep('saving');
 
     try {
-      const generalUser = users.find((u) => u.uid === assignedGeneralUid);
-      const separatorUser = users.find((u) => u.uid === assignedSeparatorUid);
-      const scannerUser = users.find((u) => u.uid === assignedScannerUid);
+      const generalOperator = operators.find((o) => o.code === assignedGeneralCode);
+      const separatorOperator = operators.find((o) => o.code === assignedSeparatorCode);
+      const scannerOperator = operators.find((o) => o.code === assignedScannerCode);
 
       await createAdminLot(
         lotCode.trim(),
@@ -204,12 +206,12 @@ export default function AdminLotesPage() {
         user.name,
         {
           assignmentType,
-          assignedGeneralUid: assignedGeneralUid || undefined,
-          assignedGeneralName: generalUser?.name,
-          assignedSeparatorUid: assignedSeparatorUid || undefined,
-          assignedSeparatorName: separatorUser?.name,
-          assignedScannerUid: assignedScannerUid || undefined,
-          assignedScannerName: scannerUser?.name,
+          assignedGeneralUid: assignedGeneralCode || undefined,
+          assignedGeneralName: generalOperator?.name,
+          assignedSeparatorUid: assignedSeparatorCode || undefined,
+          assignedSeparatorName: separatorOperator?.name,
+          assignedScannerUid: assignedScannerCode || undefined,
+          assignedScannerName: scannerOperator?.name,
         },
       );
 
@@ -244,9 +246,6 @@ export default function AdminLotesPage() {
     }
   }
 
-  const estoquistas = users.filter((u) => u.role === 'ESTOQUISTA');
-  const allAssignableUsers = users; // Admins tambem podem ser atribuidos
-
   // Estatisticas
   const adminLots = lots.filter((l) => l.isAdminCreated);
   const inProgress = lots.filter((l) => ['IN_PROGRESS', 'READY_FOR_SCAN', 'CLOSING'].includes(l.status)).length;
@@ -258,7 +257,7 @@ export default function AdminLotesPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Gerenciar Lotes</h1>
           <p className="text-sm text-muted-foreground">
-            Crie lotes e atribua usuarios para execucao
+            Crie lotes e atribua operadores para execucao
           </p>
         </div>
         <Button onClick={() => setShowCreate(true)}>
@@ -407,7 +406,7 @@ export default function AdminLotesPage() {
           <DialogHeader>
             <DialogTitle>Criar Lote (Admin)</DialogTitle>
             <DialogDescription>
-              Importe uma planilha e atribua usuarios para executar o lote
+              Importe uma planilha e atribua operadores para executar o lote
             </DialogDescription>
           </DialogHeader>
 
@@ -489,7 +488,7 @@ export default function AdminLotesPage() {
                         Aberto
                       </Label>
                       <p className="text-sm text-muted-foreground">
-                        Qualquer estoquista pode pegar este lote
+                        Qualquer operador pode pegar este lote
                       </p>
                     </div>
                   </div>
@@ -502,17 +501,17 @@ export default function AdminLotesPage() {
                         Funcao Completa
                       </Label>
                       <p className="text-sm text-muted-foreground">
-                        Um usuario faz todo o processo (separar + bipar + lacrar)
+                        Um operador faz todo o processo (separar + bipar + lacrar)
                       </p>
                       {assignmentType === 'ASSIGNED_GENERAL' && (
-                        <Select value={assignedGeneralUid} onValueChange={setAssignedGeneralUid}>
+                        <Select value={assignedGeneralCode} onValueChange={setAssignedGeneralCode}>
                           <SelectTrigger className="mt-2">
-                            <SelectValue placeholder="Selecione o usuario" />
+                            <SelectValue placeholder="Selecione o operador" />
                           </SelectTrigger>
                           <SelectContent>
-                            {allAssignableUsers.map((u) => (
-                              <SelectItem key={u.uid} value={u.uid}>
-                                {u.name} {u.role === 'ADMIN' && '(Admin)'}
+                            {operators.map((op) => (
+                              <SelectItem key={op.code} value={op.code}>
+                                {op.code} - {op.name}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -529,7 +528,7 @@ export default function AdminLotesPage() {
                         Funcoes Separadas
                       </Label>
                       <p className="text-sm text-muted-foreground">
-                        Um usuario separa e outro bipa/lacra
+                        Um operador separa e outro bipa/lacra
                       </p>
                       {assignmentType === 'ASSIGNED_SEPARATED' && (
                         <div className="mt-3 space-y-3">
@@ -538,14 +537,14 @@ export default function AdminLotesPage() {
                               <Package className="h-3 w-3 text-blue-500" />
                               Separador
                             </Label>
-                            <Select value={assignedSeparatorUid} onValueChange={setAssignedSeparatorUid}>
+                            <Select value={assignedSeparatorCode} onValueChange={setAssignedSeparatorCode}>
                               <SelectTrigger>
                                 <SelectValue placeholder="Selecione o separador" />
                               </SelectTrigger>
                               <SelectContent>
-                                {allAssignableUsers.map((u) => (
-                                  <SelectItem key={u.uid} value={u.uid}>
-                                    {u.name} {u.role === 'ADMIN' && '(Admin)'}
+                                {operators.map((op) => (
+                                  <SelectItem key={op.code} value={op.code}>
+                                    {op.code} - {op.name}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
@@ -556,14 +555,14 @@ export default function AdminLotesPage() {
                               <ScanLine className="h-3 w-3 text-amber-500" />
                               Bipador
                             </Label>
-                            <Select value={assignedScannerUid} onValueChange={setAssignedScannerUid}>
+                            <Select value={assignedScannerCode} onValueChange={setAssignedScannerCode}>
                               <SelectTrigger>
                                 <SelectValue placeholder="Selecione o bipador" />
                               </SelectTrigger>
                               <SelectContent>
-                                {allAssignableUsers.map((u) => (
-                                  <SelectItem key={u.uid} value={u.uid}>
-                                    {u.name} {u.role === 'ADMIN' && '(Admin)'}
+                                {operators.map((op) => (
+                                  <SelectItem key={op.code} value={op.code}>
+                                    {op.code} - {op.name}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
