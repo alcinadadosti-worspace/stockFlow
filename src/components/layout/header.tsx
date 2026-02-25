@@ -4,11 +4,13 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useSound } from '@/hooks/useSound';
 import { useOperator } from '@/hooks/useOperator';
+import { useOperatorData } from '@/hooks/useOperatorData';
 import { useTheme } from 'next-themes';
-import { Moon, Sun, Volume2, VolumeX, UserCircle, Shield, RefreshCw } from 'lucide-react';
+import { Moon, Sun, Volume2, VolumeX, Shield, RefreshCw, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { calculateLevel } from '@/lib/utils';
+import { calculateLevel, cn } from '@/lib/utils';
+import { getAvatarById } from '@/lib/avatars';
 
 export function Header() {
   const router = useRouter();
@@ -16,49 +18,77 @@ export function Header() {
   const { theme, setTheme } = useTheme();
   const { soundEnabled, toggleSound } = useSound();
   const { operator, isAdminMode, clearOperator } = useOperator();
+  const { operatorData } = useOperatorData();
 
-  const level = user?.xpTotal ? calculateLevel(user.xpTotal) : 1;
+  // Usar dados do operador se estiver em modo operador, senao usar dados do usuario
+  const displayXp = operator ? (operatorData?.xpTotal || 0) : (user?.xpTotal || 0);
+  const displayStreak = operator ? (operatorData?.streak || 0) : (user?.streak || 0);
+  const displayLevel = calculateLevel(displayXp);
+  const avatar = operator ? getAvatarById(operatorData?.avatar) : null;
 
   function handleChangeOperator() {
     clearOperator();
     router.push('/funcoes');
   }
 
+  function handleProfileClick() {
+    if (operator) {
+      router.push('/perfil');
+    }
+  }
+
   return (
     <header className="flex h-16 items-center justify-between border-b bg-card px-6">
-      <div>
+      <div className="flex items-center gap-3">
         {operator ? (
           <>
-            <div className="flex items-center gap-2">
-              <UserCircle className="h-5 w-5 text-primary" />
+            {/* Avatar clicavel para ir ao perfil */}
+            <button
+              onClick={handleProfileClick}
+              className={cn(
+                'flex h-10 w-10 items-center justify-center rounded-full text-xl transition-transform hover:scale-110',
+                avatar?.bgColor || 'bg-primary'
+              )}
+              title="Ver perfil"
+            >
+              {avatar?.emoji || <User className="h-5 w-5 text-white" />}
+            </button>
+            <div>
               <h2 className="text-lg font-semibold">
-                Operador {operator.code} - {operator.name}
+                {operator.name}
               </h2>
+              <p className="text-sm text-muted-foreground">
+                Operador {operator.code}
+              </p>
             </div>
-            <p className="text-sm text-muted-foreground">
-              Trabalhando como operador
-            </p>
           </>
         ) : isAdminMode ? (
           <>
-            <div className="flex items-center gap-2">
-              <Shield className="h-5 w-5 text-amber-500" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-500">
+              <Shield className="h-5 w-5 text-white" />
+            </div>
+            <div>
               <h2 className="text-lg font-semibold">
                 Modo Administrador
               </h2>
+              <p className="text-sm text-muted-foreground">
+                Acesso completo ao sistema
+              </p>
             </div>
-            <p className="text-sm text-muted-foreground">
-              Acesso completo ao sistema
-            </p>
           </>
         ) : (
           <>
-            <h2 className="text-lg font-semibold">
-              Olá, {user?.name || 'Estoquista'}
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              {user?.role === 'ADMIN' ? 'Administrador' : 'Estoquista'}
-            </p>
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary">
+              <User className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold">
+                {user?.name || 'Estoquista'}
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                {user?.role === 'ADMIN' ? 'Administrador' : 'Estoquista'}
+              </p>
+            </div>
           </>
         )}
       </div>
@@ -75,18 +105,18 @@ export function Header() {
           </Button>
         )}
         <Badge variant="secondary" className="gap-1 px-3 py-1">
-          <span className="text-xs font-medium">Nível {level}</span>
+          <span className="text-xs font-medium">Nivel {displayLevel}</span>
         </Badge>
         <Badge variant="outline" className="gap-1 px-3 py-1">
           <span className="text-xs font-bold text-amber-500">
-            {(user?.xpTotal || 0).toLocaleString('pt-BR')} XP
+            {displayXp.toLocaleString('pt-BR')} XP
           </span>
         </Badge>
-        {user?.streak && user.streak > 0 ? (
+        {displayStreak > 0 && (
           <Badge variant="outline" className="gap-1 px-3 py-1">
-            <span className="text-xs">🔥 {user.streak} dias</span>
+            <span className="text-xs">🔥 {displayStreak} dias</span>
           </Badge>
-        ) : null}
+        )}
         <Button
           variant="ghost"
           size="icon"

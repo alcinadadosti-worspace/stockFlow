@@ -11,6 +11,7 @@ export interface Operator {
   streak: number;
   lastActivityDate?: string; // YYYY-MM-DD
   createdAt: Timestamp;
+  avatar?: string; // ID do avatar selecionado
 }
 
 export interface AppUser {

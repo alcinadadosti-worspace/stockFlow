@@ -71,7 +71,7 @@ export async function createOperator(code: string, name: string): Promise<void> 
 // Atualiza operador
 export async function updateOperator(
   code: string,
-  data: Partial<Pick<Operator, 'name' | 'active'>>,
+  data: Partial<Pick<Operator, 'name' | 'active' | 'avatar'>>,
 ): Promise<void> {
   await updateDoc(doc(getFirebaseDb(), COLLECTION, code), data);
 }
