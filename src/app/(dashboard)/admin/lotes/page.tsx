@@ -76,18 +76,18 @@ function getStatusIcon(status: string) {
 
 export default function AdminLotesPage() {
   const { user } = useAuth();
-  const { operator, isAdminMode } = useOperator();
+  const { isAdminMode } = useOperator();
   const router = useRouter();
   const [lots, setLots] = useState<Lot[]>([]);
   const [users, setUsers] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Proteger pagina - apenas admin mode
+  // Proteger pagina - SEMPRE requer PIN admin
   useEffect(() => {
-    if (operator && !isAdminMode) {
+    if (!isAdminMode) {
       router.push('/funcoes');
     }
-  }, [operator, isAdminMode, router]);
+  }, [isAdminMode, router]);
   const [showCreate, setShowCreate] = useState(false);
 
   // Form state

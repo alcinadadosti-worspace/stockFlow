@@ -27,18 +27,18 @@ import { calculateLevel, formatDuration } from '@/lib/utils';
 
 export default function RelatoriosPage() {
   const router = useRouter();
-  const { operator, isAdminMode } = useOperator();
+  const { isAdminMode } = useOperator();
   const [users, setUsers] = useState<AppUser[]>([]);
   const [taskLogs, setTaskLogs] = useState<TaskLog[]>([]);
   const [lots, setLots] = useState<Lot[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Proteger pagina - apenas admin mode
+  // Proteger pagina - SEMPRE requer PIN admin
   useEffect(() => {
-    if (operator && !isAdminMode) {
+    if (!isAdminMode) {
       router.push('/funcoes');
     }
-  }, [operator, isAdminMode, router]);
+  }, [isAdminMode, router]);
   const [selectedUser, setSelectedUser] = useState<string>('all');
 
   useEffect(() => {

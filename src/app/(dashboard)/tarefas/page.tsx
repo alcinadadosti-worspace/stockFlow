@@ -1,11 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { taskLogSchema, taskTypeSchema, type TaskLogForm, type TaskTypeForm } from '@/lib/schemas';
 import { useAuth } from '@/hooks/useAuth';
 import { useSound } from '@/hooks/useSound';
+import { useOperator } from '@/hooks/useOperator';
 import confetti from 'canvas-confetti';
 import { getActiveTaskTypes, getAllTaskTypes, createTaskType, updateTaskType, deleteTaskType } from '@/services/firestore/taskTypes';
 import { createTaskLog, getTaskLogsByUser, getAllTaskLogs } from '@/services/firestore/taskLogs';
@@ -40,14 +42,40 @@ import { toast } from 'sonner';
 import { formatDateTimeBR } from '@/lib/utils';
 
 export default function TarefasPage() {
+  const router = useRouter();
   const { user } = useAuth();
+  const { isAdminMode } = useOperator();
   const isAdmin = user?.role === 'ADMIN';
 
+  // Redirecionar para admin/tarefas se for admin mode
+  useEffect(() => {
+    if (isAdminMode) {
+      router.replace('/admin/tarefas');
+    }
+  }, [isAdminMode, router]);
+
+  // Redirecionar para funcoes se nao for admin e nao tiver admin mode
+  useEffect(() => {
+    if (!isAdmin && !isAdminMode) {
+      router.replace('/funcoes');
+    }
+  }, [isAdmin, isAdminMode, router]);
+
+  // Se for admin (role), mostrar a versao admin
   if (isAdmin) {
     return <AdminTarefas />;
   }
 
-  return <EstoquistaTarefas />;
+  // Se nao for admin, mostrar loading enquanto redireciona
+  return (
+    <div className="flex items-center justify-center min-h-[400px]">
+      <div className="text-center">
+        <ClipboardList className="mx-auto mb-4 h-12 w-12 text-muted-foreground/50" />
+        <p className="text-muted-foreground">Acesso restrito</p>
+        <p className="text-sm text-muted-foreground">Redirecionando...</p>
+      </div>
+    </div>
+  );
 }
 
 // ─── ADMIN VERSION ─────────────────────────────────────────────────────────────
