@@ -2,10 +2,12 @@
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { getAllUsers } from '@/services/firestore/users';
+import { getAllOperators } from '@/services/firestore/operators';
 import { getAllTaskLogs } from '@/services/firestore/taskLogs';
 import { getAllLots } from '@/services/firestore/lots';
-import type { AppUser, TaskLog, Lot } from '@/types';
+import type { AppUser, Operator, TaskLog, Lot } from '@/types';
 import { calculateLevel } from '@/lib/utils';
+import { getAvatarById } from '@/lib/avatars';
 import {
   Zap,
   Package,
@@ -33,9 +35,10 @@ interface TodayStats {
   itemsSeparated: number;
 }
 
-interface TopUser {
-  uid: string;
+interface TopOperator {
+  code: string;
   name: string;
+  avatar?: string;
   xp: number;
   level: number;
   lots: number;
@@ -44,7 +47,7 @@ interface TopUser {
 }
 
 export default function TelaoPage() {
-  const [users, setUsers] = useState<AppUser[]>([]);
+  const [operators, setOperators] = useState<Operator[]>([]);
   const [taskLogs, setTaskLogs] = useState<TaskLog[]>([]);
   const [lots, setLots] = useState<Lot[]>([]);
   const [loading, setLoading] = useState(true);
@@ -54,12 +57,12 @@ export default function TelaoPage() {
   const loadData = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      const [fetchedUsers, fetchedTaskLogs, fetchedLots] = await Promise.all([
-        getAllUsers(),
+      const [fetchedOperators, fetchedTaskLogs, fetchedLots] = await Promise.all([
+        getAllOperators(),
         getAllTaskLogs(),
         getAllLots(),
       ]);
-      setUsers(fetchedUsers);
+      setOperators(fetchedOperators);
       setTaskLogs(fetchedTaskLogs);
       setLots(fetchedLots);
       setLastUpdate(new Date());
@@ -110,11 +113,9 @@ export default function TelaoPage() {
     };
   }, [todayTaskLogs, todayLots]);
 
-  const topUsers: TopUser[] = useMemo(() => {
-    // Incluir todos os usuarios (admin e estoquista)
-    return users.map((u) => {
-      const userTaskLogs = todayTaskLogs.filter((l) => l.uid === u.uid);
-
+  const topOperators: TopOperator[] = useMemo(() => {
+    // Calcular estatisticas para cada operador
+    return operators.map((op) => {
       // Calcular XP de lotes considerando funcoes separadas
       let xpPicking = 0;
       let lotsCount = 0;
@@ -122,57 +123,53 @@ export default function TelaoPage() {
       let itemsCount = 0;
 
       for (const l of todayLots) {
-        // Verificar participacao do usuario no lote
-        const isSeparator = l.separatorUid === u.uid;
-        const isScanner = l.scannerUid === u.uid && l.scannerUid !== l.separatorUid;
-        const isCreator = l.createdByUid === u.uid;
-        const isAssignedGeneral = l.assignedGeneralUid === u.uid;
+        // Verificar participacao do operador no lote (por codigo)
+        const isSeparator = l.separatorOperatorCode === op.code || l.assignedSeparatorUid === op.code;
+        const isScanner = l.scannerOperatorCode === op.code || l.assignedScannerUid === op.code;
+        const isGeneral = l.operatorCode === op.code || l.assignedGeneralUid === op.code;
 
-        // Verificar se eh modo separado (tem XP dividido) ou modo geral
-        const isSeparatedMode = l.separatorXpEarned && l.scannerXpEarned;
+        // Verificar se eh modo separado (tem operadores diferentes para separar e bipar)
+        const isSeparatedMode = l.separatorOperatorCode && l.scannerOperatorCode &&
+                                l.separatorOperatorCode !== l.scannerOperatorCode;
 
         // XP: atribuir corretamente baseado no modo
         if (isSeparatedMode) {
-          // Modo separado: cada um recebe sua parte
-          if (isSeparator) {
-            xpPicking += l.separatorXpEarned || 0;
-          } else if (isScanner) {
-            xpPicking += l.scannerXpEarned || 0;
+          // Modo separado: cada um recebe sua parte (60% separador, 40% bipador)
+          if (isSeparator && l.separatorXpEarned) {
+            xpPicking += l.separatorXpEarned;
+          } else if (isScanner && l.scannerXpEarned) {
+            xpPicking += l.scannerXpEarned;
           }
         } else {
           // Modo geral: quem fez o trabalho recebe tudo
-          if (isSeparator || (isCreator && !l.separatorUid) || (isAssignedGeneral && !l.separatorUid)) {
+          if (isGeneral || isSeparator) {
             xpPicking += l.xpEarned || 0;
           }
         }
 
-        // Lotes, Pedidos, Itens: contar para quem fez o trabalho principal
-        const isPrimaryWorker = isSeparator || (isCreator && !l.separatorUid);
-
-        if (isPrimaryWorker) {
+        // Lotes, Pedidos, Itens: contar para quem fez o trabalho
+        if (isGeneral || isSeparator) {
           lotsCount++;
           ordersCount += l.totals?.orders || 0;
           itemsCount += l.totals?.items || 0;
         }
       }
 
-      const xpTasks = userTaskLogs.reduce((sum, l) => sum + l.xp, 0);
-      const totalXp = xpTasks + xpPicking;
-
       return {
-        uid: u.uid,
-        name: u.name,
-        xp: totalXp,
-        level: calculateLevel(u.xpTotal || 0),
+        code: op.code,
+        name: op.name,
+        avatar: op.avatar,
+        xp: xpPicking,
+        level: calculateLevel(op.xpTotal || 0),
         lots: lotsCount,
         orders: ordersCount,
         items: itemsCount,
       };
     })
-    .filter((u) => u.xp > 0)
+    .filter((op) => op.xp > 0 || op.lots > 0)
     .sort((a, b) => b.xp - a.xp)
     .slice(0, 5);
-  }, [users, todayTaskLogs, todayLots]);
+  }, [operators, todayLots]);
 
   if (loading) {
     return (
@@ -271,23 +268,25 @@ export default function TelaoPage() {
             <h2 className="text-2xl font-bold text-white">Top 5 do Dia</h2>
           </div>
 
-          {topUsers.length === 0 ? (
+          {topOperators.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-[calc(100%-80px)] text-slate-400">
               <Medal className="h-16 w-16 mb-4 opacity-50" />
               <p className="text-xl">Nenhuma atividade ainda</p>
             </div>
           ) : (
             <div className="space-y-5 overflow-y-auto max-h-[calc(100vh-280px)]">
-              {topUsers.map((user, index) => (
+              {topOperators.map((op, index) => (
                 <RankingItem
-                  key={user.uid}
+                  key={op.code}
                   position={index + 1}
-                  name={user.name}
-                  xp={user.xp}
-                  level={user.level}
-                  lots={user.lots}
-                  orders={user.orders}
-                  items={user.items}
+                  code={op.code}
+                  name={op.name}
+                  avatar={op.avatar}
+                  xp={op.xp}
+                  level={op.level}
+                  lots={op.lots}
+                  orders={op.orders}
+                  items={op.items}
                 />
               ))}
             </div>
@@ -333,7 +332,9 @@ function MetricCard({ icon: Icon, iconColor, iconBg, label, value, suffix }: Met
 
 interface RankingItemProps {
   position: number;
+  code: string;
   name: string;
+  avatar?: string;
   xp: number;
   level: number;
   lots: number;
@@ -341,9 +342,9 @@ interface RankingItemProps {
   items: number;
 }
 
-function RankingItem({ position, name, xp, level, lots, orders, items }: RankingItemProps) {
-  const positionStyles: Record<number, { bg: string; text: string; border: string; icon?: React.ElementType }> = {
-    1: { bg: 'bg-yellow-500/20', text: 'text-yellow-400', border: 'border-yellow-500/30', icon: Crown },
+function RankingItem({ position, code, name, avatar, xp, level, lots, orders, items }: RankingItemProps) {
+  const positionStyles: Record<number, { bg: string; text: string; border: string; showCrown?: boolean }> = {
+    1: { bg: 'bg-yellow-500/20', text: 'text-yellow-400', border: 'border-yellow-500/30', showCrown: true },
     2: { bg: 'bg-slate-400/20', text: 'text-slate-300', border: 'border-slate-400/30' },
     3: { bg: 'bg-orange-600/20', text: 'text-orange-400', border: 'border-orange-500/30' },
     4: { bg: 'bg-slate-700/50', text: 'text-slate-400', border: 'border-slate-600/30' },
@@ -351,21 +352,29 @@ function RankingItem({ position, name, xp, level, lots, orders, items }: Ranking
   };
 
   const style = positionStyles[position] || positionStyles[5];
-  const Icon = style.icon;
+  const avatarData = getAvatarById(avatar);
 
   return (
     <div className={`p-6 rounded-2xl ${style.bg} border ${style.border} transition-all`}>
-      {/* Header: Position + Name + XP */}
+      {/* Header: Avatar + Name + XP */}
       <div className="flex items-center gap-4 mb-4">
-        <div className={`w-16 h-16 rounded-full flex items-center justify-center font-bold text-4xl ${style.text} ${style.bg}`}>
-          {Icon ? <Icon className="h-10 w-10" /> : position}
+        {/* Avatar com posicao */}
+        <div className="relative">
+          <div className={`w-16 h-16 rounded-full flex items-center justify-center text-4xl ${avatarData.bgColor}`}>
+            {avatarData.emoji}
+          </div>
+          {/* Badge de posicao */}
+          <div className={`absolute -bottom-1 -right-1 w-8 h-8 rounded-full flex items-center justify-center font-bold text-lg ${style.bg} ${style.text} border-2 border-slate-800`}>
+            {style.showCrown ? <Crown className="h-5 w-5" /> : position}
+          </div>
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-2xl font-bold text-white truncate">{name}</p>
+          <p className="text-lg text-slate-400">Operador {code}</p>
         </div>
         <div className="text-right">
           <p className={`text-4xl font-bold ${style.text}`}>{xp.toLocaleString('pt-BR')}</p>
-          <p className="text-lg text-slate-400">XP</p>
+          <p className="text-lg text-slate-400">XP do dia</p>
         </div>
       </div>
 
