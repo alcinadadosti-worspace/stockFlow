@@ -851,14 +851,53 @@ export async function completeLotWithOperator(lotId: string): Promise<void> {
   }
 }
 
-// Busca lotes por operador
+// Busca lotes por operador (inclui lotes criados pelo operador E atribuidos ao operador)
 export async function getLotsByOperator(operatorCode: string): Promise<Lot[]> {
-  const q = query(
+  // Buscar lotes criados pelo operador
+  const q1 = query(
     collection(getFirebaseDb(), 'lots'),
     where('operatorCode', '==', operatorCode),
   );
-  const snap = await getDocs(q);
-  const lots = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Lot);
+
+  // Buscar lotes atribuidos ao operador como funcao geral
+  const q2 = query(
+    collection(getFirebaseDb(), 'lots'),
+    where('assignedGeneralUid', '==', operatorCode),
+  );
+
+  // Buscar lotes atribuidos ao operador como separador
+  const q3 = query(
+    collection(getFirebaseDb(), 'lots'),
+    where('assignedSeparatorUid', '==', operatorCode),
+  );
+
+  // Buscar lotes atribuidos ao operador como bipador
+  const q4 = query(
+    collection(getFirebaseDb(), 'lots'),
+    where('assignedScannerUid', '==', operatorCode),
+  );
+
+  // Executar todas as queries em paralelo
+  const [snap1, snap2, snap3, snap4] = await Promise.all([
+    getDocs(q1),
+    getDocs(q2),
+    getDocs(q3),
+    getDocs(q4),
+  ]);
+
+  // Combinar resultados e remover duplicatas
+  const lotsMap = new Map<string, Lot>();
+
+  for (const snap of [snap1, snap2, snap3, snap4]) {
+    for (const docSnap of snap.docs) {
+      if (!lotsMap.has(docSnap.id)) {
+        lotsMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as Lot);
+      }
+    }
+  }
+
+  const lots = Array.from(lotsMap.values());
+
   return lots.sort((a, b) => {
     const aTime = a.createdAt?.toMillis() || 0;
     const bTime = b.createdAt?.toMillis() || 0;
