@@ -77,6 +77,7 @@ export interface Lot {
   createdByName?: string;
   status: LotStatus;
   cycle: string;
+  city?: string; // ID da cidade (major-isidoro, cacimbinhas, etc.)
   startAt?: Timestamp | null;
   endAt?: Timestamp | null;
   scanStartAt?: Timestamp | null;

@@ -5,11 +5,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { useAuth } from '@/hooks/useAuth';
+import { useOperator } from '@/hooks/useOperator';
 import { getTaskLogsByUser, getLotsByUser, getUser } from '@/services/firestore';
+import { getLotsByOperator } from '@/services/firestore/lots';
+import { getOperatorByCode } from '@/services/firestore/operators';
 import { calculateLevel, xpProgress, formatDateBR } from '@/lib/utils';
 import { BADGES } from '@/lib/constants';
 import { AdminDashboard } from '@/components/dashboard/admin-dashboard';
-import type { AppUser, TaskLog, Lot, DailyXp, UserStats } from '@/types';
+import type { AppUser, TaskLog, Lot, DailyXp, UserStats, Operator } from '@/types';
 import {
   Zap,
   Package,
@@ -165,7 +168,14 @@ function LoadingSkeleton() {
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const { operator } = useOperator();
 
+  // Se tem operador selecionado, mostra dashboard do operador
+  if (operator) {
+    return <OperatorDashboard operatorCode={operator.code} operatorName={operator.name} />;
+  }
+
+  // Se é admin sem operador, mostra dashboard admin
   if (user?.role === 'ADMIN') {
     return <AdminDashboard />;
   }
@@ -507,6 +517,442 @@ function EstoquistaDashboard() {
             )}
 
             {/* Show remaining locked badges count */}
+            {BADGES.length - earnedBadges.length > 0 && (
+              <p className="text-xs text-muted-foreground mt-4 text-center">
+                {BADGES.length - earnedBadges.length} conquista(s) restante(s) para desbloquear
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+interface OperatorDashboardProps {
+  operatorCode: string;
+  operatorName: string;
+}
+
+function computeOperatorStats(
+  lots: Lot[],
+  operatorData: Operator | null,
+  operatorCode: string,
+): UserStats {
+  const { start, end } = getMonthRange();
+
+  const monthLots = lots.filter((l) => {
+    const d = l.createdAt.toDate();
+    return d >= start && d <= end;
+  });
+
+  // Filtrar lotes onde o operador participou
+  const operatorLots = monthLots.filter((l) => {
+    return l.operatorCode === operatorCode ||
+      l.separatorOperatorCode === operatorCode ||
+      l.scannerOperatorCode === operatorCode ||
+      l.assignedGeneralUid === operatorCode ||
+      l.assignedSeparatorUid === operatorCode ||
+      l.assignedScannerUid === operatorCode;
+  });
+
+  const doneLots = operatorLots.filter((l) => l.status === 'DONE');
+
+  // Calcular XP considerando funções separadas
+  let xpPicking = 0;
+  for (const l of doneLots) {
+    const isSeparator = l.separatorOperatorCode === operatorCode || l.assignedSeparatorUid === operatorCode;
+    const isScanner = l.scannerOperatorCode === operatorCode || l.assignedScannerUid === operatorCode;
+    const isGeneral = l.operatorCode === operatorCode || l.assignedGeneralUid === operatorCode;
+
+    const isSeparatedMode = l.scannerOperatorCode &&
+      l.separatorOperatorCode !== l.scannerOperatorCode;
+
+    if (isSeparatedMode) {
+      if (isSeparator && l.separatorXpEarned) {
+        xpPicking += l.separatorXpEarned;
+      } else if (isScanner && l.scannerXpEarned) {
+        xpPicking += l.scannerXpEarned;
+      }
+    } else {
+      if (isGeneral || isSeparator) {
+        xpPicking += l.xpEarned || 0;
+      }
+    }
+  }
+
+  const xpTotal = xpPicking;
+  const ordersSealed = doneLots.reduce((sum, l) => sum + l.totals.orders, 0);
+  const itemsSeparated = doneLots.reduce((sum, l) => sum + l.totals.items, 0);
+  const totalDurationMs = doneLots.reduce((sum, l) => sum + (l.durationMs || 0), 0);
+  const avgLotDurationMs = doneLots.length > 0 ? totalDurationMs / doneLots.length : 0;
+  const totalMinutes = totalDurationMs / 60000;
+  const itemsPerMinute = totalMinutes > 0 ? itemsSeparated / totalMinutes : 0;
+  const totalHours = totalDurationMs / 3600000;
+  const ordersPerHour = totalHours > 0 ? ordersSealed / totalHours : 0;
+
+  const fastLots = doneLots.filter((l) => {
+    if (!l.durationMs || l.durationMs <= 0) return false;
+    const mins = l.durationMs / 60000;
+    const speed = l.totals.items / mins;
+    return speed >= 5;
+  }).length;
+
+  return {
+    xpTotal,
+    xpTasks: 0,
+    xpPicking,
+    tasksCompleted: 0,
+    lotsCompleted: doneLots.length,
+    ordersSealed,
+    itemsSeparated,
+    avgLotDurationMs,
+    itemsPerMinute: Math.round(itemsPerMinute * 100) / 100,
+    ordersPerHour: Math.round(ordersPerHour * 100) / 100,
+    streak: operatorData?.streak || 0,
+    fastLots,
+    level: calculateLevel(operatorData?.xpTotal || 0),
+  };
+}
+
+function buildOperatorDailyXpData(lots: Lot[], operatorCode: string): DailyXp[] {
+  const { start, end } = getMonthRange();
+  const dailyMap = new Map<string, number>();
+
+  const current = new Date(start);
+  while (current <= end) {
+    const key = current.toISOString().split('T')[0];
+    dailyMap.set(key, 0);
+    current.setDate(current.getDate() + 1);
+  }
+
+  for (const lot of lots) {
+    if (lot.status === 'DONE' && lot.endAt) {
+      const date = lot.endAt.toDate();
+      if (date >= start && date <= end) {
+        const key = date.toISOString().split('T')[0];
+
+        const isSeparator = lot.separatorOperatorCode === operatorCode || lot.assignedSeparatorUid === operatorCode;
+        const isScanner = lot.scannerOperatorCode === operatorCode || lot.assignedScannerUid === operatorCode;
+        const isGeneral = lot.operatorCode === operatorCode || lot.assignedGeneralUid === operatorCode;
+
+        const isSeparatedMode = lot.scannerOperatorCode &&
+          lot.separatorOperatorCode !== lot.scannerOperatorCode;
+
+        let xp = 0;
+        if (isSeparatedMode) {
+          if (isSeparator && lot.separatorXpEarned) {
+            xp = lot.separatorXpEarned;
+          } else if (isScanner && lot.scannerXpEarned) {
+            xp = lot.scannerXpEarned;
+          }
+        } else {
+          if (isGeneral || isSeparator) {
+            xp = lot.xpEarned || 0;
+          }
+        }
+
+        dailyMap.set(key, (dailyMap.get(key) || 0) + xp);
+      }
+    }
+  }
+
+  return Array.from(dailyMap.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, xp]) => ({ date, xp }));
+}
+
+function OperatorDashboard({ operatorCode, operatorName }: OperatorDashboardProps) {
+  const [operatorData, setOperatorData] = useState<Operator | null>(null);
+  const [lots, setLots] = useState<Lot[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadData() {
+      setLoading(true);
+      try {
+        const [fetchedOperator, fetchedLots] = await Promise.all([
+          getOperatorByCode(operatorCode),
+          getLotsByOperator(operatorCode),
+        ]);
+        setOperatorData(fetchedOperator);
+        setLots(fetchedLots);
+      } catch (error) {
+        console.error('Failed to load operator dashboard data:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadData();
+  }, [operatorCode]);
+
+  const stats = useMemo(
+    () => computeOperatorStats(lots, operatorData, operatorCode),
+    [lots, operatorData, operatorCode],
+  );
+
+  const dailyXpData = useMemo(
+    () => buildOperatorDailyXpData(lots, operatorCode),
+    [lots, operatorCode],
+  );
+
+  const progress = useMemo(
+    () => xpProgress(operatorData?.xpTotal || 0),
+    [operatorData?.xpTotal],
+  );
+
+  const earnedBadges = useMemo(
+    () => BADGES.filter((badge) => badge.condition(stats)),
+    [stats],
+  );
+
+  const recentLots = useMemo(
+    () => lots.filter((l) => l.status === 'DONE').slice(0, 5),
+    [lots],
+  );
+
+  if (loading) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto">
+        <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
+        <LoadingSkeleton />
+      </div>
+    );
+  }
+
+  const statCards = [
+    {
+      title: 'XP do Mês',
+      value: stats.xpTotal.toLocaleString('pt-BR'),
+      icon: Zap,
+      iconColor: 'text-amber-500',
+      iconBg: 'bg-amber-500/10',
+    },
+    {
+      title: 'Lotes Concluídos',
+      value: stats.lotsCompleted,
+      icon: Package,
+      iconColor: 'text-blue-500',
+      iconBg: 'bg-blue-500/10',
+    },
+    {
+      title: 'Pedidos Encerrados',
+      value: stats.ordersSealed,
+      icon: ClipboardCheck,
+      iconColor: 'text-green-500',
+      iconBg: 'bg-green-500/10',
+    },
+    {
+      title: 'Streak',
+      value: `${stats.streak} dias`,
+      icon: Flame,
+      iconColor: 'text-orange-500',
+      iconBg: 'bg-orange-500/10',
+    },
+  ];
+
+  return (
+    <div className="p-6 max-w-7xl mx-auto space-y-6">
+      {/* Page Header */}
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+        <p className="text-muted-foreground">
+          Bem-vindo de volta, {operatorName} (Operador {operatorCode})
+        </p>
+      </div>
+
+      {/* Stat Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {statCards.map((card, index) => {
+          const Icon = card.icon;
+          return (
+            <Card
+              key={card.title}
+              className="shadow-sm opacity-0 animate-fade-in-up hover:shadow-md transition-shadow"
+              style={{ animationDelay: `${index * 100}ms` }}
+            >
+              <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  {card.title}
+                </CardTitle>
+                <div className={`p-2 rounded-lg ${card.iconBg} transition-transform hover:scale-110`}>
+                  <Icon className={`h-5 w-5 ${card.iconColor}`} />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-bold">{card.value}</p>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
+      {/* XP Level Progress */}
+      <Card className="shadow-sm opacity-0 animate-fade-in-up" style={{ animationDelay: '400ms' }}>
+        <CardContent className="pt-6">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <Badge variant="default" className="text-sm px-3 py-1">
+                Level {progress.level}
+              </Badge>
+              <span className="text-sm text-muted-foreground">
+                {progress.current.toLocaleString('pt-BR')} / {progress.needed.toLocaleString('pt-BR')} XP
+              </span>
+            </div>
+            <span className="text-sm font-medium text-muted-foreground">
+              {Math.round(progress.percent)}%
+            </span>
+          </div>
+          <Progress value={progress.percent} className="h-3" />
+          <p className="text-xs text-muted-foreground mt-2">
+            XP total: {(operatorData?.xpTotal || 0).toLocaleString('pt-BR')}
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* XP Chart */}
+      <Card className="shadow-sm opacity-0 animate-fade-in-up" style={{ animationDelay: '500ms' }}>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5 text-muted-foreground" />
+            <CardTitle className="text-base">XP por Dia (Mês Atual)</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={dailyXpData}>
+                <defs>
+                  <linearGradient id="xpGradientOp" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="hsl(var(--chart-1, 220 70% 50%))" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="hsl(var(--chart-1, 220 70% 50%))" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis
+                  dataKey="date"
+                  tickFormatter={(value: string) => {
+                    const day = value.split('-')[2];
+                    return day;
+                  }}
+                  className="text-xs"
+                  stroke="hsl(var(--muted-foreground))"
+                  fontSize={12}
+                />
+                <YAxis
+                  stroke="hsl(var(--muted-foreground))"
+                  fontSize={12}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'hsl(var(--card))',
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: '8px',
+                    color: 'hsl(var(--card-foreground))',
+                  }}
+                  labelFormatter={(label: string) => {
+                    const parts = label.split('-');
+                    return `${parts[2]}/${parts[1]}`;
+                  }}
+                  formatter={(value: number) => [`${value} XP`, 'XP']}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="xp"
+                  stroke="hsl(var(--chart-1, 220 70% 50%))"
+                  strokeWidth={2}
+                  fill="url(#xpGradientOp)"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Recent Activity and Badges */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Recent Activity */}
+        <Card className="shadow-sm opacity-0 animate-fade-in-up" style={{ animationDelay: '600ms' }}>
+          <CardHeader>
+            <CardTitle className="text-base">Lotes Recentes</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {recentLots.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  Nenhum lote concluído ainda.
+                </p>
+              )}
+
+              {recentLots.map((lot) => (
+                <div
+                  key={`lot-${lot.id}`}
+                  className="flex items-center justify-between py-2 border-b border-border last:border-0"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="p-1.5 rounded-md bg-blue-500/10">
+                      <Package className="h-4 w-4 text-blue-500" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">
+                        Lote {lot.lotCode}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {lot.endAt ? formatDateBR(lot.endAt.toDate()) : formatDateBR(lot.createdAt.toDate())} -{' '}
+                        {lot.totals.orders} pedidos, {lot.totals.items} itens
+                      </p>
+                    </div>
+                  </div>
+                  {lot.xpEarned ? (
+                    <Badge variant="secondary" className="text-xs">
+                      +{lot.xpEarned} XP
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-xs">
+                      Concluído
+                    </Badge>
+                  )}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Badges */}
+        <Card className="shadow-sm opacity-0 animate-fade-in-up" style={{ animationDelay: '700ms' }}>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Award className="h-5 w-5 text-muted-foreground" />
+              <CardTitle className="text-base">Conquistas</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {earnedBadges.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                Complete atividades para desbloquear conquistas.
+              </p>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                {earnedBadges.map((badge) => (
+                  <div
+                    key={badge.id}
+                    className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/30"
+                  >
+                    <div className="p-2 rounded-lg bg-primary/10">
+                      <Award className="h-4 w-4 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">{badge.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {badge.description}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {BADGES.length - earnedBadges.length > 0 && (
               <p className="text-xs text-muted-foreground mt-4 text-center">
                 {BADGES.length - earnedBadges.length} conquista(s) restante(s) para desbloquear

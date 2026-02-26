@@ -1,5 +1,17 @@
 export const TIMEZONE = 'America/Maceio';
 
+// Cidades disponiveis para selecao nos lotes
+export const CITIES = [
+  { id: 'major-isidoro', name: 'Major Isidoro' },
+  { id: 'cacimbinhas', name: 'Cacimbinhas' },
+  { id: 'quebrangulo', name: 'Quebrangulo' },
+  { id: 'minador-do-negrao', name: 'Minador do Negrao' },
+  { id: 'palmeira-dos-indios', name: 'Palmeira dos Indios' },
+  { id: 'igaci', name: 'Igaci' },
+] as const;
+
+export type CityId = typeof CITIES[number]['id'];
+
 export const LOT_STATUS = {
   DRAFT: 'DRAFT',
   IN_PROGRESS: 'IN_PROGRESS',

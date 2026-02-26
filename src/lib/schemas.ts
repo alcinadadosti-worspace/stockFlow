@@ -36,6 +36,7 @@ export type TaskLogForm = z.infer<typeof taskLogSchema>;
 
 export const lotImportSchema = z.object({
   lotCode: z.string().regex(/^\d{8}$/, 'Código do lote deve ter exatamente 8 dígitos'),
+  city: z.string().min(1, 'Selecione uma cidade'),
 });
 
 export type LotImportForm = z.infer<typeof lotImportSchema>;

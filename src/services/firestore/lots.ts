@@ -85,6 +85,7 @@ export async function createLot(
   createdByUid: string,
   createdByName: string,
   workMode: LotWorkMode = 'GERAL',
+  city?: string,
 ): Promise<string> {
   // Validar se o codigo do lote ja existe
   const lotExists = await checkLotCodeExists(lotCode);
@@ -124,6 +125,7 @@ export async function createLot(
     createdByName,
     status: 'DRAFT' as LotStatus,
     cycle,
+    city: city || null,
     startAt: null,
     endAt: null,
     createdAt: now,
@@ -677,6 +679,7 @@ export async function createLotWithOperator(
   operatorCode: string,
   operatorName: string,
   workMode: LotWorkMode = 'GERAL',
+  city?: string,
 ): Promise<string> {
   // Validar se o codigo do lote ja existe
   const lotExists = await checkLotCodeExists(lotCode);
@@ -711,6 +714,7 @@ export async function createLotWithOperator(
     createdByName,
     status: 'DRAFT' as LotStatus,
     cycle,
+    city: city || null,
     startAt: null,
     endAt: null,
     createdAt: now,

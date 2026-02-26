@@ -16,14 +16,22 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Upload, FileSpreadsheet, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Upload, FileSpreadsheet, AlertCircle, MapPin } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { CITIES } from '@/lib/constants';
 
 interface ImportLotDialogProps {
   open: boolean;
@@ -43,7 +51,7 @@ export function ImportLotDialog({ open, onClose, onSuccess, workMode = 'GERAL' }
 
   const form = useForm<LotImportForm>({
     resolver: zodResolver(lotImportSchema),
-    defaultValues: { lotCode: '' },
+    defaultValues: { lotCode: '', city: '' },
   });
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
@@ -92,13 +100,15 @@ export function ImportLotDialog({ open, onClose, onSuccess, workMode = 'GERAL' }
           operator.code,
           operator.name,
           workMode,
+          data.city,
         );
       } else {
         // Modo tradicional (admin direto)
-        await createLot(data.lotCode, orders, user.uid, user.name, workMode);
+        await createLot(data.lotCode, orders, user.uid, user.name, workMode, data.city);
       }
+      const cityName = CITIES.find(c => c.id === data.city)?.name || data.city;
       toast.success('Lote importado com sucesso!', {
-        description: `${orders.length} pedidos importados.`,
+        description: `${orders.length} pedidos de ${cityName}.`,
       });
       resetState();
       onSuccess();
@@ -224,6 +234,33 @@ export function ImportLotDialog({ open, onClose, onSuccess, workMode = 'GERAL' }
                 {form.formState.errors.lotCode && (
                   <p className="text-xs text-destructive">
                     {form.formState.errors.lotCode.message}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <MapPin className="h-4 w-4" />
+                  Cidade
+                </Label>
+                <Select
+                  value={form.watch('city')}
+                  onValueChange={(value) => form.setValue('city', value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a cidade" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CITIES.map((city) => (
+                      <SelectItem key={city.id} value={city.id}>
+                        {city.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {form.formState.errors.city && (
+                  <p className="text-xs text-destructive">
+                    {form.formState.errors.city.message}
                   </p>
                 )}
               </div>
