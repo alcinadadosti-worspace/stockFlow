@@ -790,6 +790,24 @@ export async function startLotWithOperator(
   operatorCode: string,
   operatorName: string,
 ): Promise<void> {
+  // Verificar se o lote existe e validar permissoes
+  const lot = await getLot(lotId);
+  if (!lot) {
+    throw new Error('Lote não encontrado.');
+  }
+
+  // Validar atribuicao de operador
+  if (lot.assignmentType === 'ASSIGNED_GENERAL') {
+    if (lot.assignedGeneralUid !== operatorCode) {
+      throw new Error('Este lote foi atribuído a outro operador.');
+    }
+  } else if (lot.assignmentType === 'ASSIGNED_SEPARATED') {
+    // Na fase de separacao, apenas o separador atribuido pode iniciar
+    if (lot.assignedSeparatorUid !== operatorCode) {
+      throw new Error('Este lote foi atribuído a outro separador. Você não pode iniciar a separação.');
+    }
+  }
+
   await updateDoc(doc(getFirebaseDb(), 'lots', lotId), {
     status: 'IN_PROGRESS' as LotStatus,
     startAt: Timestamp.now(),
@@ -812,6 +830,13 @@ export async function claimLotForScanningWithOperator(
   }
   if (lot.status !== 'READY_FOR_SCAN') {
     throw new Error('Este lote ainda nao esta pronto para bipagem. Aguarde o separador finalizar.');
+  }
+
+  // Validar atribuicao de bipador para lotes ASSIGNED_SEPARATED
+  if (lot.assignmentType === 'ASSIGNED_SEPARATED') {
+    if (lot.assignedScannerUid && lot.assignedScannerUid !== operatorCode) {
+      throw new Error('Este lote foi atribuído a outro bipador. Você não pode bipar este lote.');
+    }
   }
 
   await updateDoc(doc(getFirebaseDb(), 'lots', lotId), {

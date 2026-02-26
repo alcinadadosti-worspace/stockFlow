@@ -132,7 +132,8 @@ export default function SeparadorLotDetailPage() {
       await loadData();
     } catch (err) {
       playSound('error');
-      toast.error('Erro ao iniciar lote');
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao iniciar lote';
+      toast.error(errorMessage);
     } finally {
       setActionLoading(false);
     }
@@ -188,6 +189,29 @@ export default function SeparadorLotDetailPage() {
   const totalOrders = orders.length;
   const startMs = lot.startAt?.toMillis() || 0;
   const endMs = lot.endAt?.toMillis() || undefined;
+
+  // Verificar se o usuario/operador pode trabalhar neste lote baseado na atribuicao
+  const canWorkOnLot = (() => {
+    // Se nao tem atribuicao especifica (OPEN ou undefined), qualquer um pode
+    if (!lot.assignmentType || lot.assignmentType === 'OPEN') {
+      return true;
+    }
+
+    // Identificador atual: pode ser o codigo do operador OU o UID do usuario
+    const currentIdentifier = operator?.code || user?.uid;
+
+    // Se tem atribuicao geral, apenas o usuario/operador atribuido pode
+    if (lot.assignmentType === 'ASSIGNED_GENERAL') {
+      return lot.assignedGeneralUid === currentIdentifier;
+    }
+
+    // Se tem atribuicao separada, apenas o separador atribuido pode separar
+    if (lot.assignmentType === 'ASSIGNED_SEPARATED') {
+      return lot.assignedSeparatorUid === currentIdentifier;
+    }
+
+    return false;
+  })();
 
   return (
     <div className="space-y-6">
@@ -262,7 +286,7 @@ export default function SeparadorLotDetailPage() {
       )}
 
       {/* Actions */}
-      {lot.status === 'DRAFT' && (
+      {canWorkOnLot && lot.status === 'DRAFT' && (
         <Card className="border-blue-500/30 bg-blue-500/5">
           <CardContent className="flex items-center justify-between pt-6">
             <div>
@@ -279,7 +303,20 @@ export default function SeparadorLotDetailPage() {
         </Card>
       )}
 
-      {lot.status === 'IN_PROGRESS' && (
+      {!canWorkOnLot && lot.status === 'DRAFT' && (
+        <Card className="border-red-500/30 bg-red-500/5">
+          <CardContent className="flex items-center justify-center pt-6 pb-6 gap-4">
+            <div className="text-center">
+              <p className="text-lg font-semibold text-red-500">Acesso Restrito</p>
+              <p className="text-sm text-muted-foreground">
+                Este lote foi atribuido a outro operador para separacao
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {canWorkOnLot && lot.status === 'IN_PROGRESS' && (
         <Card className="border-blue-500/30 bg-blue-500/5">
           <CardContent className="flex items-center justify-between pt-6">
             <div>

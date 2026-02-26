@@ -51,6 +51,26 @@ export default function BipadorPage() {
     }
   }, [operator, isAdminMode, loading, router]);
 
+  // Função para verificar se o operador pode bipar um lote
+  function canOperatorScanLot(lot: Lot, operatorCode: string): boolean {
+    // Lotes OPEN ou sem atribuicao especifica: qualquer um pode
+    if (!lot.assignmentType || lot.assignmentType === 'OPEN') {
+      return true;
+    }
+
+    // Lotes ASSIGNED_GENERAL: nao aparece para bipador separado
+    if (lot.assignmentType === 'ASSIGNED_GENERAL') {
+      return false;
+    }
+
+    // Lotes ASSIGNED_SEPARATED: apenas o bipador atribuido pode
+    if (lot.assignmentType === 'ASSIGNED_SEPARATED') {
+      return lot.assignedScannerUid === operatorCode;
+    }
+
+    return false;
+  }
+
   const loadData = useCallback(async () => {
     if (!user) return;
     setLoading(true);
@@ -64,7 +84,15 @@ export default function BipadorPage() {
         ]);
 
         // Lotes disponiveis: READY_FOR_SCAN + lotes abertos do admin
-        const allAvailable = [...available];
+        // Filtrar apenas lotes que este operador pode bipar
+        const allAvailable: Lot[] = [];
+
+        for (const lot of available) {
+          if (canOperatorScanLot(lot, operator.code)) {
+            allAvailable.push(lot);
+          }
+        }
+
         for (const lot of openLots) {
           if (lot.status === 'READY_FOR_SCAN' && !allAvailable.find((l) => l.id === lot.id)) {
             allAvailable.push(lot);
@@ -86,10 +114,21 @@ export default function BipadorPage() {
         ]);
 
         // Lotes disponiveis: apenas READY_FOR_SCAN (separador ja finalizou)
+        // Filtrar apenas lotes OPEN ou atribuidos a este usuario
+        const allAvailable: Lot[] = [];
+
+        for (const lot of available) {
+          // Apenas OPEN ou atribuidos a este usuario
+          if (!lot.assignmentType || lot.assignmentType === 'OPEN') {
+            allAvailable.push(lot);
+          } else if (lot.assignmentType === 'ASSIGNED_SEPARATED' && lot.assignedScannerUid === user.uid) {
+            allAvailable.push(lot);
+          }
+        }
+
         const assignedReadyForScan = assigned.filter(
           (l) => l.status === 'READY_FOR_SCAN'
         );
-        const allAvailable = [...available];
         for (const lot of assignedReadyForScan) {
           if (!allAvailable.find((l) => l.id === lot.id)) {
             allAvailable.push(lot);
@@ -137,7 +176,8 @@ export default function BipadorPage() {
       toast.success('Lote assumido! Voce pode iniciar a bipagem.');
       router.push(`/bipador/${lot.id}`);
     } catch (err) {
-      toast.error('Erro ao assumir lote');
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao assumir lote';
+      toast.error(errorMessage);
     } finally {
       setClaiming(null);
     }

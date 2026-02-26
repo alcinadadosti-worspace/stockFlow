@@ -164,7 +164,8 @@ export default function LotDetailPage() {
       await loadData();
     } catch (err) {
       playSound('error');
-      toast.error('Erro ao iniciar lote');
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao iniciar lote';
+      toast.error(errorMessage);
     } finally {
       setActionLoading(false);
     }
@@ -311,27 +312,30 @@ export default function LotDetailPage() {
   const nextPendingOrder = orders.find((o) => o.status === 'PENDING');
   const isScanningStarted = !!lot.scanStartAt;
 
-  // Verificar se o usuario pode trabalhar neste lote baseado na atribuicao
+  // Verificar se o usuario/operador pode trabalhar neste lote baseado na atribuicao
   const canWorkOnLot = (() => {
     // Se nao tem atribuicao especifica (OPEN ou undefined), qualquer um pode
     if (!lot.assignmentType || lot.assignmentType === 'OPEN') {
       return true;
     }
 
-    // Se tem atribuicao geral, apenas o usuario atribuido pode
+    // Identificador atual: pode ser o UID do usuario OU o codigo do operador
+    const currentIdentifier = operator?.code || user?.uid;
+
+    // Se tem atribuicao geral, apenas o usuario/operador atribuido pode
     if (lot.assignmentType === 'ASSIGNED_GENERAL') {
-      return lot.assignedGeneralUid === user?.uid;
+      return lot.assignedGeneralUid === currentIdentifier;
     }
 
     // Se tem atribuicao separada, depende da fase do lote
     if (lot.assignmentType === 'ASSIGNED_SEPARATED') {
-      // Fase de separacao (DRAFT, IN_PROGRESS): apenas separador atribuido
+      // Fase de separacao (DRAFT, IN_PROGRESS): APENAS separador atribuido pode
       if (lot.status === 'DRAFT' || lot.status === 'IN_PROGRESS') {
-        return lot.assignedSeparatorUid === user?.uid;
+        return lot.assignedSeparatorUid === currentIdentifier;
       }
-      // Fase de bipagem (READY_FOR_SCAN, CLOSING): apenas bipador atribuido
+      // Fase de bipagem (READY_FOR_SCAN, CLOSING): APENAS bipador atribuido pode
       if (lot.status === 'READY_FOR_SCAN' || lot.status === 'CLOSING') {
-        return lot.assignedScannerUid === user?.uid;
+        return lot.assignedScannerUid === currentIdentifier;
       }
     }
 
