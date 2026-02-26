@@ -193,12 +193,39 @@ export default function LotesPage() {
                         {getStatusIcon(lot.status)}
                         {LOT_STATUS_LABELS[lot.status]}
                       </Badge>
-                      {lot.isAdminCreated && lot.assignedGeneralUid === user?.uid && (
-                        <Badge variant="outline" className="text-violet-500 border-violet-500/30 gap-1">
-                          <Star className="h-3 w-3" />
-                          Atribuído
-                        </Badge>
-                      )}
+                      {/* Badge para lotes atribuídos */}
+                      {lot.isAdminCreated && (() => {
+                        const currentId = operator?.code || user?.uid;
+                        const isAssignedGeneral = lot.assignmentType === 'ASSIGNED_GENERAL' && lot.assignedGeneralUid === currentId;
+                        const isAssignedSeparator = lot.assignmentType === 'ASSIGNED_SEPARATED' && lot.assignedSeparatorUid === currentId;
+                        const isAssignedScanner = lot.assignmentType === 'ASSIGNED_SEPARATED' && lot.assignedScannerUid === currentId;
+
+                        if (isAssignedGeneral) {
+                          return (
+                            <Badge variant="outline" className="text-violet-500 border-violet-500/30 gap-1">
+                              <Star className="h-3 w-3" />
+                              Atribuído
+                            </Badge>
+                          );
+                        }
+                        if (isAssignedSeparator) {
+                          return (
+                            <Badge variant="outline" className="text-blue-500 border-blue-500/30 gap-1">
+                              <Star className="h-3 w-3" />
+                              Separador
+                            </Badge>
+                          );
+                        }
+                        if (isAssignedScanner) {
+                          return (
+                            <Badge variant="outline" className="text-amber-500 border-amber-500/30 gap-1">
+                              <Star className="h-3 w-3" />
+                              Bipador
+                            </Badge>
+                          );
+                        }
+                        return null;
+                      })()}
                       {lot.isAdminCreated && lot.assignmentType === 'OPEN' && lot.status === 'DRAFT' && (
                         <Badge variant="outline" className="text-emerald-500 border-emerald-500/30 gap-1">
                           Disponível
