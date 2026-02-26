@@ -3,7 +3,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
-import { useOperator } from '@/hooks/useOperator';
 import { getAllLots, createAdminLot, deleteLot } from '@/services/firestore/lots';
 import { getActiveOperators, seedDefaultOperators } from '@/services/firestore/operators';
 import { parseSpreadsheet } from '@/lib/spreadsheet';
@@ -76,18 +75,10 @@ function getStatusIcon(status: string) {
 
 export default function AdminLotesPage() {
   const { user } = useAuth();
-  const { isAdminMode } = useOperator();
   const router = useRouter();
   const [lots, setLots] = useState<Lot[]>([]);
   const [operators, setOperators] = useState<Operator[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // Proteger pagina - SEMPRE requer PIN admin
-  useEffect(() => {
-    if (!isAdminMode) {
-      router.push('/funcoes');
-    }
-  }, [isAdminMode, router]);
   const [showCreate, setShowCreate] = useState(false);
 
   // Form state

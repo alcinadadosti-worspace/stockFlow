@@ -46,12 +46,12 @@ const mainNav: NavItem[] = [
 ];
 
 const adminNav: NavItem[] = [
-  { href: '/admin/lotes', label: 'Gerenciar Lotes', icon: Package, requiresAdminPin: true },
+  { href: '/admin/lotes', label: 'Gerenciar Lotes', icon: Package },
   { href: '/admin/operadores', label: 'Operadores', icon: UserCog, requiresAdminPin: true },
   { href: '/admin/regras-xp', label: 'Regras de XP', icon: Sliders, requiresAdminPin: true },
   { href: '/admin/tarefas', label: 'Tarefas', icon: ClipboardList, requiresAdminPin: true },
   { href: '/admin/usuarios', label: 'Usuários', icon: Users, requiresAdminPin: true },
-  { href: '/admin/relatorios', label: 'Relatórios', icon: BarChart3, requiresAdminPin: true },
+  { href: '/admin/relatorios', label: 'Relatórios', icon: BarChart3 },
   { href: '/telao', label: 'Telão', icon: Monitor, external: true },
 ];
 

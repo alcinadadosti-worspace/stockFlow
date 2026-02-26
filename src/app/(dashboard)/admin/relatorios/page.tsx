@@ -1,17 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { getAllUsers } from '@/services/firestore/users';
+import { getAllOperators } from '@/services/firestore/operators';
 import { getAllTaskLogs } from '@/services/firestore/taskLogs';
 import { getAllLots } from '@/services/firestore/lots';
-import { useOperator } from '@/hooks/useOperator';
-import type { AppUser, TaskLog, Lot } from '@/types';
+import type { Operator, TaskLog, Lot } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Separator } from '@/components/ui/separator';
 import { BarChart3, Users, Package, ClipboardList, Zap, Timer, Gauge } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -26,20 +22,11 @@ import {
 import { calculateLevel, formatDuration } from '@/lib/utils';
 
 export default function RelatoriosPage() {
-  const router = useRouter();
-  const { isAdminMode } = useOperator();
-  const [users, setUsers] = useState<AppUser[]>([]);
+  const [operators, setOperators] = useState<Operator[]>([]);
   const [taskLogs, setTaskLogs] = useState<TaskLog[]>([]);
   const [lots, setLots] = useState<Lot[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // Proteger pagina - SEMPRE requer PIN admin
-  useEffect(() => {
-    if (!isAdminMode) {
-      router.push('/funcoes');
-    }
-  }, [isAdminMode, router]);
-  const [selectedUser, setSelectedUser] = useState<string>('all');
+  const [selectedOperator, setSelectedOperator] = useState<string>('all');
 
   useEffect(() => {
     loadData();
@@ -48,12 +35,12 @@ export default function RelatoriosPage() {
   async function loadData() {
     setLoading(true);
     try {
-      const [usersData, logsData, lotsData] = await Promise.all([
-        getAllUsers(),
+      const [operatorsData, logsData, lotsData] = await Promise.all([
+        getAllOperators(),
         getAllTaskLogs(),
         getAllLots(),
       ]);
-      setUsers(usersData);
+      setOperators(operatorsData.filter(op => op.active));
       setTaskLogs(logsData);
       setLots(lotsData);
     } catch (err) {
@@ -63,12 +50,47 @@ export default function RelatoriosPage() {
     }
   }
 
-  const filteredLogs = selectedUser === 'all' ? taskLogs : taskLogs.filter((l) => l.uid === selectedUser);
-  const filteredLots = selectedUser === 'all' ? lots : lots.filter((l) => l.createdByUid === selectedUser);
+  // Função para verificar se um operador participou de um lote
+  function isOperatorInLot(lot: Lot, operatorCode: string): boolean {
+    return lot.operatorCode === operatorCode ||
+      lot.separatorOperatorCode === operatorCode ||
+      lot.scannerOperatorCode === operatorCode ||
+      lot.assignedGeneralUid === operatorCode ||
+      lot.assignedSeparatorUid === operatorCode ||
+      lot.assignedScannerUid === operatorCode;
+  }
+
+  // Função para calcular XP do operador em um lote
+  function getOperatorXpFromLot(lot: Lot, operatorCode: string): number {
+    if (lot.status !== 'DONE') return 0;
+
+    const isSeparator = lot.separatorOperatorCode === operatorCode || lot.assignedSeparatorUid === operatorCode;
+    const isScanner = lot.scannerOperatorCode === operatorCode || lot.assignedScannerUid === operatorCode;
+    const isGeneral = lot.operatorCode === operatorCode || lot.assignedGeneralUid === operatorCode;
+
+    const isSeparatedMode = lot.scannerOperatorCode &&
+      lot.separatorOperatorCode !== lot.scannerOperatorCode;
+
+    if (isSeparatedMode) {
+      if (isSeparator && lot.separatorXpEarned) return lot.separatorXpEarned;
+      if (isScanner && lot.scannerXpEarned) return lot.scannerXpEarned;
+      return 0;
+    }
+
+    if (isGeneral || isSeparator) return lot.xpEarned || 0;
+    return 0;
+  }
+
+  const filteredLots = selectedOperator === 'all'
+    ? lots
+    : lots.filter((l) => isOperatorInLot(l, selectedOperator));
   const completedLots = filteredLots.filter((l) => l.status === 'DONE');
 
-  const totalXpTasks = filteredLogs.reduce((sum, l) => sum + (l.xp || 0), 0);
-  const totalXpPicking = completedLots.reduce((sum, l) => sum + (l.xpEarned || 0), 0);
+  // Calcular XP total de picking
+  const totalXpPicking = selectedOperator === 'all'
+    ? completedLots.reduce((sum, l) => sum + (l.xpEarned || 0), 0)
+    : completedLots.reduce((sum, l) => sum + getOperatorXpFromLot(l, selectedOperator), 0);
+
   const totalItems = completedLots.reduce((sum, l) => sum + (l.totals?.items || 0), 0);
   const totalOrders = completedLots.reduce((sum, l) => sum + (l.totals?.orders || 0), 0);
   const avgDuration = completedLots.length > 0
@@ -76,18 +98,17 @@ export default function RelatoriosPage() {
     : 0;
   const totalDurationMin = completedLots.reduce((sum, l) => sum + (l.durationMs || 0), 0) / 60000;
   const itemsPerMin = totalDurationMin > 0 ? totalItems / totalDurationMin : 0;
-  const ordersPerHour = totalDurationMin > 0 ? (totalOrders / totalDurationMin) * 60 : 0;
 
-  // Chart data: XP by user
-  const chartData = users.map((u) => {
-    const userLogs = taskLogs.filter((l) => l.uid === u.uid);
-    const userLots = lots.filter((l) => l.createdByUid === u.uid && l.status === 'DONE');
+  // Chart data: XP by operator
+  const chartData = operators.map((op) => {
+    const opLots = lots.filter((l) => l.status === 'DONE' && isOperatorInLot(l, op.code));
+    const xpPicking = opLots.reduce((sum, l) => sum + getOperatorXpFromLot(l, op.code), 0);
     return {
-      name: u.name.split(' ')[0],
-      tarefas: userLogs.reduce((sum, l) => sum + (l.xp || 0), 0),
-      picking: userLots.reduce((sum, l) => sum + (l.xpEarned || 0), 0),
+      name: op.name.split(' ')[0],
+      code: op.code,
+      picking: xpPicking,
     };
-  }).sort((a, b) => (b.tarefas + b.picking) - (a.tarefas + a.picking)).slice(0, 10);
+  }).sort((a, b) => b.picking - a.picking);
 
   if (loading) {
     return (
@@ -107,18 +128,18 @@ export default function RelatoriosPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Relatórios</h1>
           <p className="text-sm text-muted-foreground">
-            Visão geral de produtividade e XP
+            Visão geral de produtividade da equipe
           </p>
         </div>
-        <Select value={selectedUser} onValueChange={setSelectedUser}>
+        <Select value={selectedOperator} onValueChange={setSelectedOperator}>
           <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="Todos os usuários" />
+            <SelectValue placeholder="Todos os operadores" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Todos os Usuários</SelectItem>
-            {users.map((u) => (
-              <SelectItem key={u.uid} value={u.uid}>
-                {u.name}
+            <SelectItem value="all">Toda a Equipe</SelectItem>
+            {operators.map((op) => (
+              <SelectItem key={op.code} value={op.code}>
+                {op.code} - {op.name}
               </SelectItem>
             ))}
           </SelectContent>
@@ -130,15 +151,15 @@ export default function RelatoriosPage() {
         <Card>
           <CardContent className="pt-6">
             <Zap className="mb-2 h-5 w-5 text-amber-500" />
-            <div className="text-2xl font-bold">{(totalXpTasks + totalXpPicking).toLocaleString('pt-BR')}</div>
+            <div className="text-2xl font-bold">{totalXpPicking.toLocaleString('pt-BR')}</div>
             <p className="text-xs text-muted-foreground">XP Total</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
-            <ClipboardList className="mb-2 h-5 w-5 text-blue-500" />
-            <div className="text-2xl font-bold">{filteredLogs.length}</div>
-            <p className="text-xs text-muted-foreground">Tarefas</p>
+            <Users className="mb-2 h-5 w-5 text-blue-500" />
+            <div className="text-2xl font-bold">{operators.length}</div>
+            <p className="text-xs text-muted-foreground">Operadores</p>
           </CardContent>
         </Card>
         <Card>
@@ -150,7 +171,7 @@ export default function RelatoriosPage() {
         </Card>
         <Card>
           <CardContent className="pt-6">
-            <Users className="mb-2 h-5 w-5 text-emerald-500" />
+            <ClipboardList className="mb-2 h-5 w-5 text-emerald-500" />
             <div className="text-2xl font-bold">{totalOrders}</div>
             <p className="text-xs text-muted-foreground">Pedidos</p>
           </CardContent>
@@ -176,7 +197,7 @@ export default function RelatoriosPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <BarChart3 className="h-5 w-5" />
-            XP por Usuário
+            XP por Operador
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -192,30 +213,29 @@ export default function RelatoriosPage() {
                     border: '1px solid hsl(var(--border))',
                     borderRadius: '8px',
                   }}
+                  formatter={(value: number, name: string) => [value.toLocaleString('pt-BR') + ' XP', 'XP Picking']}
                 />
-                <Legend />
-                <Bar dataKey="tarefas" name="Tarefas" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="picking" name="Picking" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="picking" name="XP Picking" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </CardContent>
       </Card>
 
-      {/* User Details Table */}
+      {/* Operator Details Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Detalhes por Estoquista</CardTitle>
+          <CardTitle>Detalhes por Operador</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b">
+                  <th className="px-3 py-2 text-left font-medium">Código</th>
                   <th className="px-3 py-2 text-left font-medium">Nome</th>
                   <th className="px-3 py-2 text-right font-medium">Nível</th>
                   <th className="px-3 py-2 text-right font-medium">XP Total</th>
-                  <th className="px-3 py-2 text-right font-medium">Tarefas</th>
                   <th className="px-3 py-2 text-right font-medium">Lotes</th>
                   <th className="px-3 py-2 text-right font-medium">Pedidos</th>
                   <th className="px-3 py-2 text-right font-medium">Itens</th>
@@ -223,21 +243,21 @@ export default function RelatoriosPage() {
                 </tr>
               </thead>
               <tbody>
-                {users.map((u) => {
-                  const uLogs = taskLogs.filter((l) => l.uid === u.uid);
-                  const uLots = lots.filter((l) => l.createdByUid === u.uid && l.status === 'DONE');
-                  const xpT = uLogs.reduce((s, l) => s + (l.xp || 0), 0);
-                  const xpP = uLots.reduce((s, l) => s + (l.xpEarned || 0), 0);
+                {operators.map((op) => {
+                  const opLots = lots.filter((l) => l.status === 'DONE' && isOperatorInLot(l, op.code));
+                  const xpP = opLots.reduce((s, l) => s + getOperatorXpFromLot(l, op.code), 0);
+                  const totalOrdersOp = opLots.reduce((s, l) => s + (l.totals?.orders || 0), 0);
+                  const totalItemsOp = opLots.reduce((s, l) => s + (l.totals?.items || 0), 0);
                   return (
-                    <tr key={u.uid} className="border-b">
-                      <td className="px-3 py-2 font-medium">{u.name}</td>
-                      <td className="px-3 py-2 text-right">{calculateLevel(u.xpTotal || 0)}</td>
-                      <td className="px-3 py-2 text-right font-bold text-amber-500">{(xpT + xpP).toLocaleString('pt-BR')}</td>
-                      <td className="px-3 py-2 text-right">{uLogs.length}</td>
-                      <td className="px-3 py-2 text-right">{uLots.length}</td>
-                      <td className="px-3 py-2 text-right">{uLots.reduce((s, l) => s + (l.totals?.orders || 0), 0)}</td>
-                      <td className="px-3 py-2 text-right">{uLots.reduce((s, l) => s + (l.totals?.items || 0), 0)}</td>
-                      <td className="px-3 py-2 text-right">{u.streak || 0}</td>
+                    <tr key={op.code} className="border-b">
+                      <td className="px-3 py-2 font-mono font-medium">{op.code}</td>
+                      <td className="px-3 py-2 font-medium">{op.name}</td>
+                      <td className="px-3 py-2 text-right">{calculateLevel(op.xpTotal || 0)}</td>
+                      <td className="px-3 py-2 text-right font-bold text-amber-500">{(op.xpTotal || 0).toLocaleString('pt-BR')}</td>
+                      <td className="px-3 py-2 text-right">{opLots.length}</td>
+                      <td className="px-3 py-2 text-right">{totalOrdersOp}</td>
+                      <td className="px-3 py-2 text-right">{totalItemsOp}</td>
+                      <td className="px-3 py-2 text-right">{op.streak || 0}</td>
                     </tr>
                   );
                 })}
