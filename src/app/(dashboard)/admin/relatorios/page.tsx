@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BarChart3, Users, Package, ClipboardList, Zap, Timer, Gauge, AlertTriangle, Clock, CheckCircle2, XCircle, MapPin } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -418,17 +419,29 @@ export default function RelatoriosPage() {
             </Alert>
           )}
 
-          {/* Tabela de pedidos fora do prazo */}
-          {nonCompliantCount > 0 && (
-            <div className="space-y-4">
-              <h4 className="text-sm font-semibold text-red-600 flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4" />
-                Pedidos Atrasados ({nonCompliantCount})
-              </h4>
-              <div className="overflow-x-auto max-h-[300px] overflow-y-auto">
+          {/* Tabelas de pedidos com abas */}
+          <Tabs defaultValue="all" className="space-y-4">
+            <TabsList>
+              <TabsTrigger value="all" className="gap-2">
+                <ClipboardList className="h-4 w-4" />
+                Todos ({totalOrdersAnalyzed})
+              </TabsTrigger>
+              <TabsTrigger value="compliant" className="gap-2">
+                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                No Prazo ({compliantCount})
+              </TabsTrigger>
+              <TabsTrigger value="non-compliant" className="gap-2">
+                <XCircle className="h-4 w-4 text-red-500" />
+                Atrasados ({nonCompliantCount})
+              </TabsTrigger>
+            </TabsList>
+
+            {/* Tabela de TODOS os pedidos */}
+            <TabsContent value="all">
+              <div className="overflow-x-auto max-h-[400px] overflow-y-auto border rounded-lg">
                 <table className="w-full text-sm">
-                  <thead className="sticky top-0 bg-background">
-                    <tr className="border-b">
+                  <thead className="sticky top-0 bg-background border-b">
+                    <tr>
                       <th className="px-3 py-2 text-left font-medium">Pedido</th>
                       <th className="px-3 py-2 text-left font-medium">Lote</th>
                       <th className="px-3 py-2 text-left font-medium">Cidade</th>
@@ -439,33 +452,134 @@ export default function RelatoriosPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {nonCompliantOrders.slice(0, 50).map((order) => (
-                      <tr key={order.orderCode} className="border-b">
+                    {ordersWithApprovalDate.slice(0, 100).map((order) => (
+                      <tr key={order.orderCode} className="border-b hover:bg-muted/50">
                         <td className="px-3 py-2 font-mono">{order.orderCode}</td>
                         <td className="px-3 py-2 font-mono">{order.lotCode}</td>
                         <td className="px-3 py-2">{getCityName(order.city)}</td>
                         <td className="px-3 py-2 text-center">{formatDateBR(order.approvedAt)}</td>
                         <td className="px-3 py-2 text-center">{formatDateBR(order.sealedAt)}</td>
-                        <td className="px-3 py-2 text-center font-bold text-red-600">
-                          {order.lifetimeDays}
+                        <td className={`px-3 py-2 text-center font-bold ${order.isCompliant ? 'text-emerald-600' : 'text-red-600'}`}>
+                          {order.lifetimeDays ?? '--'}
                         </td>
                         <td className="px-3 py-2 text-center">
-                          <Badge variant="destructive" className="text-xs">
-                            Atrasado
+                          <Badge variant={order.isCompliant ? 'default' : 'destructive'} className="text-xs">
+                            {order.isCompliant ? 'No Prazo' : 'Atrasado'}
                           </Badge>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-                {nonCompliantCount > 50 && (
-                  <p className="mt-2 text-sm text-muted-foreground text-center">
-                    Mostrando 50 de {nonCompliantCount} pedidos atrasados
+                {totalOrdersAnalyzed > 100 && (
+                  <p className="p-2 text-sm text-muted-foreground text-center border-t">
+                    Mostrando 100 de {totalOrdersAnalyzed} pedidos
                   </p>
                 )}
               </div>
-            </div>
-          )}
+            </TabsContent>
+
+            {/* Tabela de pedidos NO PRAZO */}
+            <TabsContent value="compliant">
+              {compliantCount === 0 ? (
+                <div className="py-8 text-center text-muted-foreground">
+                  <CheckCircle2 className="mx-auto mb-2 h-8 w-8 text-muted-foreground/50" />
+                  <p>Nenhum pedido no prazo encontrado</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto max-h-[400px] overflow-y-auto border rounded-lg">
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 bg-background border-b">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-medium">Pedido</th>
+                        <th className="px-3 py-2 text-left font-medium">Lote</th>
+                        <th className="px-3 py-2 text-left font-medium">Cidade</th>
+                        <th className="px-3 py-2 text-center font-medium">Aprovado</th>
+                        <th className="px-3 py-2 text-center font-medium">Lacrado</th>
+                        <th className="px-3 py-2 text-center font-medium">Dias</th>
+                        <th className="px-3 py-2 text-center font-medium">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {compliantOrders.slice(0, 100).map((order) => (
+                        <tr key={order.orderCode} className="border-b hover:bg-muted/50">
+                          <td className="px-3 py-2 font-mono">{order.orderCode}</td>
+                          <td className="px-3 py-2 font-mono">{order.lotCode}</td>
+                          <td className="px-3 py-2">{getCityName(order.city)}</td>
+                          <td className="px-3 py-2 text-center">{formatDateBR(order.approvedAt)}</td>
+                          <td className="px-3 py-2 text-center">{formatDateBR(order.sealedAt)}</td>
+                          <td className="px-3 py-2 text-center font-bold text-emerald-600">
+                            {order.lifetimeDays ?? '--'}
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            <Badge className="text-xs bg-emerald-500">
+                              No Prazo
+                            </Badge>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {compliantCount > 100 && (
+                    <p className="p-2 text-sm text-muted-foreground text-center border-t">
+                      Mostrando 100 de {compliantCount} pedidos no prazo
+                    </p>
+                  )}
+                </div>
+              )}
+            </TabsContent>
+
+            {/* Tabela de pedidos ATRASADOS */}
+            <TabsContent value="non-compliant">
+              {nonCompliantCount === 0 ? (
+                <div className="py-8 text-center text-muted-foreground">
+                  <CheckCircle2 className="mx-auto mb-2 h-8 w-8 text-emerald-500" />
+                  <p className="text-emerald-600 font-medium">Nenhum pedido atrasado!</p>
+                  <p className="text-sm">Todos os pedidos foram lacrados dentro do prazo de 24 horas.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto max-h-[400px] overflow-y-auto border rounded-lg">
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 bg-background border-b">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-medium">Pedido</th>
+                        <th className="px-3 py-2 text-left font-medium">Lote</th>
+                        <th className="px-3 py-2 text-left font-medium">Cidade</th>
+                        <th className="px-3 py-2 text-center font-medium">Aprovado</th>
+                        <th className="px-3 py-2 text-center font-medium">Lacrado</th>
+                        <th className="px-3 py-2 text-center font-medium">Dias</th>
+                        <th className="px-3 py-2 text-center font-medium">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {nonCompliantOrders.slice(0, 100).map((order) => (
+                        <tr key={order.orderCode} className="border-b hover:bg-muted/50">
+                          <td className="px-3 py-2 font-mono">{order.orderCode}</td>
+                          <td className="px-3 py-2 font-mono">{order.lotCode}</td>
+                          <td className="px-3 py-2">{getCityName(order.city)}</td>
+                          <td className="px-3 py-2 text-center">{formatDateBR(order.approvedAt)}</td>
+                          <td className="px-3 py-2 text-center">{formatDateBR(order.sealedAt)}</td>
+                          <td className="px-3 py-2 text-center font-bold text-red-600">
+                            {order.lifetimeDays}
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            <Badge variant="destructive" className="text-xs">
+                              Atrasado
+                            </Badge>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {nonCompliantCount > 100 && (
+                    <p className="p-2 text-sm text-muted-foreground text-center border-t">
+                      Mostrando 100 de {nonCompliantCount} pedidos atrasados
+                    </p>
+                  )}
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
 
           {/* Resumo por cidade */}
           {Object.keys(nonCompliantByCity).length > 0 && selectedCity === 'all' && (
