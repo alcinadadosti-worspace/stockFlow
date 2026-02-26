@@ -478,6 +478,7 @@ export async function createAdminLot(
   createdByUid: string,
   createdByName: string,
   assignment: AdminLotAssignment,
+  city?: string,
 ): Promise<string> {
   // Validar se o codigo do lote ja existe
   const lotExists = await checkLotCodeExists(lotCode);
@@ -518,6 +519,7 @@ export async function createAdminLot(
     createdByName,
     status: 'DRAFT' as LotStatus,
     cycle,
+    city: city || null,
     startAt: null,
     endAt: null,
     createdAt: now,

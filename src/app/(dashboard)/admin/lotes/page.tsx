@@ -46,8 +46,9 @@ import {
   Trash2,
 } from 'lucide-react';
 import { formatDateTimeBR, formatDuration } from '@/lib/utils';
-import { LOT_STATUS_LABELS } from '@/lib/constants';
+import { LOT_STATUS_LABELS, CITIES } from '@/lib/constants';
 import { cn } from '@/lib/utils';
+import { MapPin } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import { toast } from 'sonner';
 
@@ -91,6 +92,7 @@ export default function AdminLotesPage() {
   const [assignedGeneralCode, setAssignedGeneralCode] = useState('');
   const [assignedSeparatorCode, setAssignedSeparatorCode] = useState('');
   const [assignedScannerCode, setAssignedScannerCode] = useState('');
+  const [city, setCity] = useState('');
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
 
@@ -153,6 +155,7 @@ export default function AdminLotesPage() {
     setErrors([]);
     setFileName('');
     setLotCode('');
+    setCity('');
     setAssignmentType('OPEN');
     setAssignedGeneralCode('');
     setAssignedSeparatorCode('');
@@ -163,6 +166,10 @@ export default function AdminLotesPage() {
     if (!user || orders.length === 0) return;
     if (!lotCode.trim() || !/^\d{8}$/.test(lotCode.trim())) {
       toast.error('Codigo do lote deve ter 8 digitos');
+      return;
+    }
+    if (!city) {
+      toast.error('Selecione uma cidade');
       return;
     }
 
@@ -204,6 +211,7 @@ export default function AdminLotesPage() {
           assignedScannerUid: assignedScannerCode || undefined,
           assignedScannerName: scannerOperator?.name,
         },
+        city,
       );
 
       toast.success('Lote criado com sucesso!');
@@ -462,6 +470,26 @@ export default function AdminLotesPage() {
                   onChange={(e) => setLotCode(e.target.value.replace(/\D/g, '').slice(0, 8))}
                   className="font-mono"
                 />
+              </div>
+
+              {/* City */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <MapPin className="h-4 w-4" />
+                  Cidade
+                </Label>
+                <Select value={city} onValueChange={setCity}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a cidade" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CITIES.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               {/* Assignment type */}
