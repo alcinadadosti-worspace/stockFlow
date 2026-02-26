@@ -3,12 +3,15 @@
 import { useEffect, useState } from 'react';
 import { getAllOperators } from '@/services/firestore/operators';
 import { getAllTaskLogs } from '@/services/firestore/taskLogs';
-import { getAllLots } from '@/services/firestore/lots';
+import { getAllLots, getAllSealedOrders, type OrderWithLotInfo } from '@/services/firestore/lots';
 import type { Operator, TaskLog, Lot } from '@/types';
+import { CITIES } from '@/lib/constants';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { BarChart3, Users, Package, ClipboardList, Zap, Timer, Gauge } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { BarChart3, Users, Package, ClipboardList, Zap, Timer, Gauge, AlertTriangle, Clock, CheckCircle2, XCircle, MapPin } from 'lucide-react';
 import {
   ResponsiveContainer,
   BarChart,
@@ -25,8 +28,10 @@ export default function RelatoriosPage() {
   const [operators, setOperators] = useState<Operator[]>([]);
   const [taskLogs, setTaskLogs] = useState<TaskLog[]>([]);
   const [lots, setLots] = useState<Lot[]>([]);
+  const [sealedOrders, setSealedOrders] = useState<OrderWithLotInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedOperator, setSelectedOperator] = useState<string>('all');
+  const [selectedCity, setSelectedCity] = useState<string>('all');
 
   useEffect(() => {
     loadData();
@@ -35,14 +40,16 @@ export default function RelatoriosPage() {
   async function loadData() {
     setLoading(true);
     try {
-      const [operatorsData, logsData, lotsData] = await Promise.all([
+      const [operatorsData, logsData, lotsData, ordersData] = await Promise.all([
         getAllOperators(),
         getAllTaskLogs(),
         getAllLots(),
+        getAllSealedOrders(),
       ]);
       setOperators(operatorsData.filter(op => op.active));
       setTaskLogs(logsData);
       setLots(lotsData);
+      setSealedOrders(ordersData);
     } catch (err) {
       console.error(err);
     } finally {
@@ -110,6 +117,103 @@ export default function RelatoriosPage() {
     };
   }).sort((a, b) => b.picking - a.picking);
 
+  // ==================== ANALISE DE TEMPO DE VIDA DOS PEDIDOS ====================
+
+  // Interface para análise de pedido
+  interface OrderLifetimeAnalysis {
+    orderCode: string;
+    lotCode: string;
+    city?: string;
+    approvedAt: Date | null;
+    sealedAt: Date | null;
+    lifetimeDays: number | null; // dias entre aprovação e lacração
+    isCompliant: boolean; // cumpriu a regra de 24hrs
+  }
+
+  // Função para extrair apenas a data (sem hora) de um Timestamp
+  function getDateOnly(timestamp: { toDate: () => Date } | null | undefined): Date | null {
+    if (!timestamp) return null;
+    const date = timestamp.toDate();
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  }
+
+  // Calcular diferença em dias entre duas datas
+  function getDaysDifference(date1: Date, date2: Date): number {
+    const diffMs = date2.getTime() - date1.getTime();
+    return Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  }
+
+  // Filtrar pedidos por cidade se selecionada
+  const filteredOrders = selectedCity === 'all'
+    ? sealedOrders
+    : sealedOrders.filter((o) => o.city === selectedCity);
+
+  // Analisar todos os pedidos lacrados
+  const orderAnalysis: OrderLifetimeAnalysis[] = filteredOrders.map((order) => {
+    const approvedDate = getDateOnly(order.approvedAt);
+    const sealedDate = getDateOnly(order.sealedAt);
+
+    let lifetimeDays: number | null = null;
+    let isCompliant = true;
+
+    if (approvedDate && sealedDate) {
+      lifetimeDays = getDaysDifference(approvedDate, sealedDate);
+      // Regra: pedido aprovado deve ser lacrado em até 24hrs (próximo dia)
+      // Se aprovado dia 25 e lacrado dia 26 = 1 dia = OK
+      // Se aprovado dia 25 e lacrado dia 27 = 2 dias = NÃO OK
+      isCompliant = lifetimeDays <= 1;
+    }
+
+    return {
+      orderCode: order.orderCode,
+      lotCode: order.lotCode,
+      city: order.city,
+      approvedAt: approvedDate,
+      sealedAt: sealedDate,
+      lifetimeDays,
+      isCompliant,
+    };
+  });
+
+  // Separar pedidos com data de aprovação válida
+  const ordersWithApprovalDate = orderAnalysis.filter((o) => o.approvedAt !== null);
+  const compliantOrders = ordersWithApprovalDate.filter((o) => o.isCompliant);
+  const nonCompliantOrders = ordersWithApprovalDate.filter((o) => !o.isCompliant);
+
+  // Estatísticas
+  const totalOrdersAnalyzed = ordersWithApprovalDate.length;
+  const compliantCount = compliantOrders.length;
+  const nonCompliantCount = nonCompliantOrders.length;
+  const complianceRate = totalOrdersAnalyzed > 0
+    ? (compliantCount / totalOrdersAnalyzed * 100).toFixed(1)
+    : '0';
+
+  // Calcular média de dias para lacrar
+  const avgLifetimeDays = ordersWithApprovalDate.length > 0
+    ? ordersWithApprovalDate.reduce((sum, o) => sum + (o.lifetimeDays || 0), 0) / ordersWithApprovalDate.length
+    : 0;
+
+  // Agrupar pedidos atrasados por cidade
+  const nonCompliantByCity = nonCompliantOrders.reduce((acc, o) => {
+    const cityId = o.city || 'sem-cidade';
+    if (!acc[cityId]) acc[cityId] = [];
+    acc[cityId].push(o);
+    return acc;
+  }, {} as Record<string, OrderLifetimeAnalysis[]>);
+
+  // Função para formatar data BR
+  function formatDateBR(date: Date | null): string {
+    if (!date) return '--';
+    return date.toLocaleDateString('pt-BR');
+  }
+
+  // Nome da cidade
+  function getCityName(cityId?: string): string {
+    if (!cityId) return 'Sem cidade';
+    const city = CITIES.find((c) => c.id === cityId);
+    return city?.name || cityId;
+  }
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -131,19 +235,34 @@ export default function RelatoriosPage() {
             Visão geral de produtividade da equipe
           </p>
         </div>
-        <Select value={selectedOperator} onValueChange={setSelectedOperator}>
-          <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="Todos os operadores" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Toda a Equipe</SelectItem>
-            {operators.map((op) => (
-              <SelectItem key={op.code} value={op.code}>
-                {op.code} - {op.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex gap-2">
+          <Select value={selectedCity} onValueChange={setSelectedCity}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Todas as cidades" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as Cidades</SelectItem>
+              {CITIES.map((city) => (
+                <SelectItem key={city.id} value={city.id}>
+                  {city.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={selectedOperator} onValueChange={setSelectedOperator}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="Todos os operadores" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Toda a Equipe</SelectItem>
+              {operators.map((op) => (
+                <SelectItem key={op.code} value={op.code}>
+                  {op.code} - {op.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* KPIs */}
@@ -219,6 +338,151 @@ export default function RelatoriosPage() {
               </BarChart>
             </ResponsiveContainer>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Order Lifetime Analysis */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Clock className="h-5 w-5" />
+            Tempo de Vida dos Pedidos
+            {selectedCity !== 'all' && (
+              <Badge variant="outline" className="ml-2">
+                <MapPin className="mr-1 h-3 w-3" />
+                {getCityName(selectedCity)}
+              </Badge>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* KPIs de Tempo de Vida */}
+          <div className="grid gap-4 md:grid-cols-4">
+            <div className="rounded-lg border p-4">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <ClipboardList className="h-4 w-4" />
+                <span className="text-sm">Pedidos Analisados</span>
+              </div>
+              <div className="mt-2 text-2xl font-bold">{totalOrdersAnalyzed}</div>
+            </div>
+            <div className="rounded-lg border p-4">
+              <div className="flex items-center gap-2 text-emerald-600">
+                <CheckCircle2 className="h-4 w-4" />
+                <span className="text-sm">Dentro do Prazo</span>
+              </div>
+              <div className="mt-2 text-2xl font-bold text-emerald-600">{compliantCount}</div>
+            </div>
+            <div className="rounded-lg border p-4">
+              <div className="flex items-center gap-2 text-red-600">
+                <XCircle className="h-4 w-4" />
+                <span className="text-sm">Fora do Prazo</span>
+              </div>
+              <div className="mt-2 text-2xl font-bold text-red-600">{nonCompliantCount}</div>
+            </div>
+            <div className="rounded-lg border p-4">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Gauge className="h-4 w-4" />
+                <span className="text-sm">Taxa de Conformidade</span>
+              </div>
+              <div className="mt-2 text-2xl font-bold">
+                {complianceRate}%
+              </div>
+            </div>
+          </div>
+
+          {/* Média de dias */}
+          <div className="rounded-lg border p-4 bg-muted/30">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Média de dias para lacrar</p>
+                <p className="text-xl font-bold">{avgLifetimeDays.toFixed(1)} dias</p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm text-muted-foreground">Meta: até 1 dia</p>
+                <Badge variant={avgLifetimeDays <= 1 ? 'default' : 'destructive'}>
+                  {avgLifetimeDays <= 1 ? 'Dentro da meta' : 'Acima da meta'}
+                </Badge>
+              </div>
+            </div>
+          </div>
+
+          {/* Alerta para pedidos fora do prazo */}
+          {nonCompliantCount > 0 && (
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Pedidos fora do prazo de 24 horas</AlertTitle>
+              <AlertDescription>
+                {nonCompliantCount} pedido(s) foram lacrados após o prazo de 24 horas da aprovação.
+                A regra determina que pedidos aprovados devem ser lacrados até o dia seguinte.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* Tabela de pedidos fora do prazo */}
+          {nonCompliantCount > 0 && (
+            <div className="space-y-4">
+              <h4 className="text-sm font-semibold text-red-600 flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4" />
+                Pedidos Atrasados ({nonCompliantCount})
+              </h4>
+              <div className="overflow-x-auto max-h-[300px] overflow-y-auto">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-background">
+                    <tr className="border-b">
+                      <th className="px-3 py-2 text-left font-medium">Pedido</th>
+                      <th className="px-3 py-2 text-left font-medium">Lote</th>
+                      <th className="px-3 py-2 text-left font-medium">Cidade</th>
+                      <th className="px-3 py-2 text-center font-medium">Aprovado</th>
+                      <th className="px-3 py-2 text-center font-medium">Lacrado</th>
+                      <th className="px-3 py-2 text-center font-medium">Dias</th>
+                      <th className="px-3 py-2 text-center font-medium">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {nonCompliantOrders.slice(0, 50).map((order) => (
+                      <tr key={order.orderCode} className="border-b">
+                        <td className="px-3 py-2 font-mono">{order.orderCode}</td>
+                        <td className="px-3 py-2 font-mono">{order.lotCode}</td>
+                        <td className="px-3 py-2">{getCityName(order.city)}</td>
+                        <td className="px-3 py-2 text-center">{formatDateBR(order.approvedAt)}</td>
+                        <td className="px-3 py-2 text-center">{formatDateBR(order.sealedAt)}</td>
+                        <td className="px-3 py-2 text-center font-bold text-red-600">
+                          {order.lifetimeDays}
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          <Badge variant="destructive" className="text-xs">
+                            Atrasado
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {nonCompliantCount > 50 && (
+                  <p className="mt-2 text-sm text-muted-foreground text-center">
+                    Mostrando 50 de {nonCompliantCount} pedidos atrasados
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Resumo por cidade */}
+          {Object.keys(nonCompliantByCity).length > 0 && selectedCity === 'all' && (
+            <div className="space-y-2">
+              <h4 className="text-sm font-semibold flex items-center gap-2">
+                <MapPin className="h-4 w-4" />
+                Pedidos Atrasados por Cidade
+              </h4>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(nonCompliantByCity).map(([cityId, orders]) => (
+                  <Badge key={cityId} variant="outline" className="px-3 py-1">
+                    {getCityName(cityId)}: <span className="ml-1 font-bold text-red-600">{orders.length}</span>
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

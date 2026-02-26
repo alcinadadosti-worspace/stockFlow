@@ -186,6 +186,40 @@ export async function getLotOrders(lotId: string): Promise<LotOrder[]> {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as LotOrder);
 }
 
+// Busca todos os pedidos de todos os lotes concluidos
+export interface OrderWithLotInfo extends LotOrder {
+  lotId: string;
+  lotCode: string;
+  city?: string;
+}
+
+export async function getAllSealedOrders(): Promise<OrderWithLotInfo[]> {
+  // Buscar todos os lotes concluidos
+  const lotsQuery = query(
+    collection(getFirebaseDb(), 'lots'),
+    where('status', '==', 'DONE'),
+  );
+  const lotsSnap = await getDocs(lotsQuery);
+  const lots = lotsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Lot);
+
+  // Buscar pedidos de cada lote
+  const allOrders: OrderWithLotInfo[] = [];
+
+  for (const lot of lots) {
+    const ordersSnap = await getDocs(collection(getFirebaseDb(), 'lots', lot.id, 'orders'));
+    const orders = ordersSnap.docs.map((d) => ({
+      ...d.data(),
+      id: d.id,
+      lotId: lot.id,
+      lotCode: lot.lotCode,
+      city: lot.city,
+    }) as OrderWithLotInfo);
+    allOrders.push(...orders);
+  }
+
+  return allOrders;
+}
+
 // Apaga um lote e todos os seus pedidos e lacres associados, removendo XP dos usuarios
 export async function deleteLot(lotId: string): Promise<void> {
   // Buscar o lote para verificar XP
