@@ -9,6 +9,7 @@ import {
   query,
   orderBy,
   Timestamp,
+  increment,
 } from 'firebase/firestore';
 import { getFirebaseDb } from '@/lib/firebase';
 import type { AppUser, UserRole } from '@/types';
@@ -58,19 +59,20 @@ export async function getAdmins(): Promise<AppUser[]> {
 }
 
 export async function incrementUserXp(uid: string, xp: number): Promise<void> {
+  if (xp <= 0) return;
   const userRef = doc(getFirebaseDb(), COLLECTION, uid);
   const snap = await getDoc(userRef);
   if (!snap.exists()) return;
-  const current = snap.data().xpTotal || 0;
-  await updateDoc(userRef, { xpTotal: current + xp });
+  await updateDoc(userRef, { xpTotal: increment(xp) });
 }
 
 export async function decrementUserXp(uid: string, xp: number): Promise<void> {
+  if (xp <= 0) return;
   const userRef = doc(getFirebaseDb(), COLLECTION, uid);
   const snap = await getDoc(userRef);
   if (!snap.exists()) return;
   const current = snap.data().xpTotal || 0;
-  const newXp = Math.max(0, current - xp); // Nao deixa ficar negativo
+  const newXp = Math.max(0, current - xp);
   await updateDoc(userRef, { xpTotal: newXp });
 }
 
@@ -80,12 +82,14 @@ export async function updateUserStreak(uid: string): Promise<void> {
   if (!snap.exists()) return;
 
   const data = snap.data();
-  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  const today = new Date().toLocaleDateString('sv'); // YYYY-MM-DD no fuso local
   const lastDate = data.lastActivityDate;
 
   if (lastDate === today) return;
 
-  const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+  const yesterdayDate = new Date();
+  yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+  const yesterday = yesterdayDate.toLocaleDateString('sv');
   const newStreak = lastDate === yesterday ? (data.streak || 0) + 1 : 1;
 
   await updateDoc(userRef, {

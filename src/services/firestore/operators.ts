@@ -10,6 +10,7 @@ import {
   where,
   orderBy,
   Timestamp,
+  increment,
 } from 'firebase/firestore';
 import { getFirebaseDb } from '@/lib/firebase';
 import type { Operator } from '@/types';
@@ -83,16 +84,16 @@ export async function deleteOperator(code: string): Promise<void> {
 
 // Incrementa XP do operador
 export async function incrementOperatorXp(code: string, xp: number): Promise<void> {
+  if (xp <= 0) return;
   const operatorRef = doc(getFirebaseDb(), COLLECTION, code);
   const snap = await getDoc(operatorRef);
   if (!snap.exists()) return;
-
-  const current = snap.data().xpTotal || 0;
-  await updateDoc(operatorRef, { xpTotal: current + xp });
+  await updateDoc(operatorRef, { xpTotal: increment(xp) });
 }
 
 // Decrementa XP do operador
 export async function decrementOperatorXp(code: string, xp: number): Promise<void> {
+  if (xp <= 0) return;
   const operatorRef = doc(getFirebaseDb(), COLLECTION, code);
   const snap = await getDoc(operatorRef);
   if (!snap.exists()) return;
@@ -109,20 +110,20 @@ export async function updateOperatorStreak(code: string): Promise<void> {
   if (!snap.exists()) return;
 
   const data = snap.data();
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date().toLocaleDateString('sv'); // YYYY-MM-DD no fuso local
   const lastDate = data.lastActivityDate;
 
-  let newStreak = 1;
-  if (lastDate) {
-    const last = new Date(lastDate);
-    const todayDate = new Date(today);
-    const diffDays = Math.floor((todayDate.getTime() - last.getTime()) / (1000 * 60 * 60 * 24));
+  if (lastDate === today) {
+    return;
+  }
 
-    if (diffDays === 1) {
-      newStreak = (data.streak || 0) + 1;
-    } else if (diffDays === 0) {
-      newStreak = data.streak || 1;
-    }
+  const yesterdayDate = new Date();
+  yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+  const yesterday = yesterdayDate.toLocaleDateString('sv');
+
+  let newStreak = 1;
+  if (lastDate === yesterday) {
+    newStreak = (data.streak || 0) + 1;
   }
 
   await updateDoc(operatorRef, {

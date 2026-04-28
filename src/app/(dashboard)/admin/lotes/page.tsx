@@ -217,7 +217,7 @@ export default function AdminLotesPage() {
       toast.success('Lote criado com sucesso!');
       setShowCreate(false);
       resetForm();
-      loadData();
+      await loadData();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Erro ao criar lote';
       toast.error(message);
@@ -236,7 +236,7 @@ export default function AdminLotesPage() {
     try {
       await deleteLot(lotId);
       toast.success(`Lote ${lotCode} apagado!`);
-      loadData();
+      await loadData();
     } catch (err) {
       toast.error('Erro ao apagar lote');
       console.error(err);

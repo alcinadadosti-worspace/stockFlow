@@ -125,7 +125,7 @@ export default function SeparadorLotDetailPage() {
       if (operator) {
         await startLotWithOperator(lotId, operator.code, operator.name);
       } else {
-        await startLot(lotId);
+        await startLot(lotId, user?.uid, user?.name);
       }
       playSound('lot-started');
       toast.success('Separacao iniciada! Bom trabalho!');

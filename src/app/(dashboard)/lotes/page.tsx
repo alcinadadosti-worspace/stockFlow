@@ -263,9 +263,9 @@ export default function LotesPage() {
       <ImportLotDialog
         open={showImport}
         onClose={() => setShowImport(false)}
-        onSuccess={() => {
+        onSuccess={async () => {
           setShowImport(false);
-          loadData();
+          await loadData();
         }}
       />
     </div>

@@ -315,24 +315,29 @@ export async function claimLotForScanning(
   scannerUid: string,
   scannerName: string,
 ): Promise<void> {
-  // Verificar se o lote esta pronto para bipagem
-  const lot = await getLot(lotId);
-  if (!lot) {
-    throw new Error('Lote nao encontrado.');
-  }
-  if (lot.status !== 'READY_FOR_SCAN') {
-    throw new Error('Este lote ainda nao esta pronto para bipagem. Aguarde o separador finalizar.');
-  }
+  await runTransaction(getFirebaseDb(), async (transaction) => {
+    const lotRef = doc(getFirebaseDb(), 'lots', lotId);
+    const lotSnap = await transaction.get(lotRef);
 
-  // Se o lote tem bipador atribuido, validar
-  if (lot.assignmentType === 'ASSIGNED_SEPARATED' && lot.assignedScannerUid && lot.assignedScannerUid !== scannerUid) {
-    throw new Error('Este lote foi atribuido a outro bipador.');
-  }
+    if (!lotSnap.exists()) {
+      throw new Error('Lote nao encontrado.');
+    }
 
-  await updateDoc(doc(getFirebaseDb(), 'lots', lotId), {
-    status: 'CLOSING' as LotStatus,
-    scannerUid,
-    scannerName,
+    const lot = lotSnap.data() as Omit<Lot, 'id'>;
+
+    if (lot.status !== 'READY_FOR_SCAN') {
+      throw new Error('Este lote ainda nao esta pronto para bipagem. Aguarde o separador finalizar.');
+    }
+
+    if (lot.assignmentType === 'ASSIGNED_SEPARATED' && lot.assignedScannerUid && lot.assignedScannerUid !== scannerUid) {
+      throw new Error('Este lote foi atribuido a outro bipador.');
+    }
+
+    transaction.update(lotRef, {
+      status: 'CLOSING' as LotStatus,
+      scannerUid,
+      scannerName,
+    });
   });
 }
 
@@ -407,7 +412,7 @@ export async function sealOrder(
 
       transaction.set(sealRef, {
         sealedCode,
-        orderCode: orderId,
+        orderCode: orderSnap.data().orderCode,
         lotId,
         createdAt: now,
       });
@@ -435,7 +440,7 @@ export async function completeLot(lotId: string): Promise<void> {
   const scanEndMs = now.toMillis();
   const scanDurationMs = scanEndMs - scanStartMs;
 
-  const totalDurationMs = scanEndMs - endMs;
+  const totalDurationMs = scanEndMs - startMs;
 
   const rules = await getPickingRules();
   const xpResult = calculateLotXp(lot.totals, durationMs, rules);
@@ -481,8 +486,9 @@ export async function completeLot(lotId: string): Promise<void> {
       totalDurationMs,
     });
 
-    await incrementUserXp(lot.createdByUid, xpResult.total);
-    await updateUserStreak(lot.createdByUid);
+    const xpRecipient = lot.separatorUid || lot.createdByUid;
+    await incrementUserXp(xpRecipient, xpResult.total);
+    await updateUserStreak(xpRecipient);
   }
 }
 
@@ -824,26 +830,32 @@ export async function claimLotForScanningWithOperator(
   operatorCode: string,
   operatorName: string,
 ): Promise<void> {
-  const lot = await getLot(lotId);
-  if (!lot) {
-    throw new Error('Lote nao encontrado.');
-  }
-  if (lot.status !== 'READY_FOR_SCAN') {
-    throw new Error('Este lote ainda nao esta pronto para bipagem. Aguarde o separador finalizar.');
-  }
+  await runTransaction(getFirebaseDb(), async (transaction) => {
+    const lotRef = doc(getFirebaseDb(), 'lots', lotId);
+    const lotSnap = await transaction.get(lotRef);
 
-  // Validar atribuicao de bipador para lotes ASSIGNED_SEPARATED
-  if (lot.assignmentType === 'ASSIGNED_SEPARATED') {
-    if (lot.assignedScannerUid && lot.assignedScannerUid !== operatorCode) {
-      throw new Error('Este lote foi atribuído a outro bipador. Você não pode bipar este lote.');
+    if (!lotSnap.exists()) {
+      throw new Error('Lote nao encontrado.');
     }
-  }
 
-  await updateDoc(doc(getFirebaseDb(), 'lots', lotId), {
-    status: 'CLOSING' as LotStatus,
-    scannerOperatorCode: operatorCode,
-    scannerOperatorName: operatorName,
-    scanStartAt: Timestamp.now(),
+    const lot = lotSnap.data() as Omit<Lot, 'id'>;
+
+    if (lot.status !== 'READY_FOR_SCAN') {
+      throw new Error('Este lote ainda nao esta pronto para bipagem. Aguarde o separador finalizar.');
+    }
+
+    if (lot.assignmentType === 'ASSIGNED_SEPARATED') {
+      if (lot.assignedScannerUid && lot.assignedScannerUid !== operatorCode) {
+        throw new Error('Este lote foi atribuído a outro bipador. Você não pode bipar este lote.');
+      }
+    }
+
+    transaction.update(lotRef, {
+      status: 'CLOSING' as LotStatus,
+      scannerOperatorCode: operatorCode,
+      scannerOperatorName: operatorName,
+      scanStartAt: Timestamp.now(),
+    });
   });
 }
 
@@ -863,7 +875,7 @@ export async function completeLotWithOperator(lotId: string): Promise<void> {
   const scanEndMs = now.toMillis();
   const scanDurationMs = scanEndMs - scanStartMs;
 
-  const totalDurationMs = scanEndMs - endMs;
+  const totalDurationMs = scanEndMs - startMs;
 
   const rules = await getPickingRules();
   const xpResult = calculateLotXp(lot.totals, durationMs, rules);
