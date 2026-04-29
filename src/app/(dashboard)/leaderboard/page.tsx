@@ -18,7 +18,7 @@ import { AdminLeaderboardRow } from '@/components/leaderboard/admin-leaderboard-
 
 export default function LeaderboardPage() {
   const { user } = useAuth();
-  const { filialScope } = useFilial();
+  const { filialScope, isReady } = useFilial();
   const isAdmin = user?.role === 'ADMIN';
   const [entries, setEntries] = useState<AdminLeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -26,8 +26,9 @@ export default function LeaderboardPage() {
   const [expandedUid, setExpandedUid] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!isReady) return;
     loadData();
-  }, [period, filialScope]);
+  }, [period, filialScope, isReady]);
 
   async function loadData() {
     setLoading(true);

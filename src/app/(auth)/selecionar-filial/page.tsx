@@ -30,8 +30,9 @@ export default function SelecionarFilialPage() {
       setCode('');
       return;
     }
+    // Não navegar aqui — o useEffect observa hasScope e navega
+    // depois que o React confirma o estado, garantindo filialScope correto no dashboard
     setFilialScope(result.scope);
-    router.push('/dashboard');
   }
 
   if (authLoading || !isReady) {
