@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { useOperator } from '@/hooks/useOperator';
+import { useFilial } from '@/hooks/useFilial';
 import {
   LayoutDashboard,
   Trophy,
@@ -43,10 +44,10 @@ const mainNav: NavItem[] = [
   { href: '/funcoes', label: 'Funcoes', icon: Layers },
   { href: '/lotes', label: 'Lotes', icon: Package, requiresOperator: true },
   { href: '/pedido-avulso', label: 'Pedido Avulso', icon: FileText, requiresOperator: true },
+  { href: '/admin/lotes', label: 'Gerenciar Lotes', icon: Package },
 ];
 
 const adminNav: NavItem[] = [
-  { href: '/admin/lotes', label: 'Gerenciar Lotes', icon: Package },
   { href: '/admin/operadores', label: 'Operadores', icon: UserCog, requiresAdminPin: true },
   { href: '/admin/regras-xp', label: 'Regras de XP', icon: Sliders, requiresAdminPin: true },
   { href: '/admin/tarefas', label: 'Tarefas', icon: ClipboardList, requiresAdminPin: true },
@@ -60,6 +61,7 @@ export function Sidebar() {
   const router = useRouter();
   const { user, signOut } = useAuth();
   const { operator, isAdminMode } = useOperator();
+  const { clearFilialScope } = useFilial();
   const [collapsed, setCollapsed] = useState(false);
   const isAdmin = user?.role === 'ADMIN';
 
@@ -172,7 +174,7 @@ export function Sidebar() {
             variant="ghost"
             size="sm"
             className="w-full justify-start gap-3 text-muted-foreground"
-            onClick={signOut}
+            onClick={() => { clearFilialScope(); signOut(); }}
           >
             <LogOut className="h-4 w-4 shrink-0" />
             {!collapsed && <span>Sair</span>}

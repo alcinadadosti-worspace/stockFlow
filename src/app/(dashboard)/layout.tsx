@@ -1,6 +1,7 @@
 'use client';
 
 import { useAuth } from '@/hooks/useAuth';
+import { useFilial } from '@/hooks/useFilial';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { Sidebar } from '@/components/layout/sidebar';
@@ -12,15 +13,16 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const { user, loading } = useAuth();
+  const { hasScope, isReady } = useFilial();
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && !user) {
-      router.replace('/login');
-    }
-  }, [user, loading, router]);
+    if (loading || !isReady) return;
+    if (!user) router.replace('/login');
+    else if (!hasScope) router.replace('/selecionar-filial');
+  }, [user, loading, hasScope, isReady, router]);
 
-  if (loading) {
+  if (loading || !isReady) {
     return (
       <div className="flex h-screen items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
@@ -28,7 +30,7 @@ export default function DashboardLayout({
     );
   }
 
-  if (!user) return null;
+  if (!user || !hasScope) return null;
 
   return (
     <div className="flex h-screen overflow-hidden">

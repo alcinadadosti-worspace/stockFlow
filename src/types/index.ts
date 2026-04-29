@@ -11,7 +11,8 @@ export interface Operator {
   streak: number;
   lastActivityDate?: string; // YYYY-MM-DD
   createdAt: Timestamp;
-  avatar?: string; // ID do avatar selecionado
+  avatar?: string;
+  filial?: string; // ex: "palmeira", "matriz"
 }
 
 export interface AppUser {
@@ -23,6 +24,7 @@ export interface AppUser {
   xpTotal?: number;
   streak?: number;
   lastActivityDate?: string; // YYYY-MM-DD
+  filial?: string; // ex: "palmeira", "matriz"
 }
 
 export interface TaskType {

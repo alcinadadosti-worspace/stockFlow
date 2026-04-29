@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { createUserWithEmailAndPassword, getAuth, signInWithEmailAndPassword } from 'firebase/auth';
-import { getAllUsers, updateUserRole, deleteUser, createUser } from '@/services/firestore/users';
+import { createUserWithEmailAndPassword, getAuth } from 'firebase/auth';
+import { getAllUsers, updateUserRole, updateUserFilial, deleteUser, createUser } from '@/services/firestore/users';
 import { useOperator } from '@/hooks/useOperator';
 import { useAuth } from '@/hooks/useAuth';
 import type { AppUser, UserRole } from '@/types';
@@ -23,16 +23,22 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Users, Shield, User, Zap, Trash2, Loader2, Plus, Copy, Check } from 'lucide-react';
+import { Users, Shield, User, Zap, Trash2, Loader2, Plus, Copy, Check, Building2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { calculateLevel, formatDateBR } from '@/lib/utils';
+
+const FILIAL_LABELS: Record<string, string> = {
+  palmeira: 'Palmeira',
+  matriz: 'Matriz',
+};
 
 const createUserSchema = z.object({
   name: z.string().min(2, 'Nome deve ter pelo menos 2 caracteres'),
   email: z.string().email('Email invalido'),
   password: z.string().min(6, 'Senha deve ter pelo menos 6 caracteres'),
   role: z.enum(['ADMIN', 'ESTOQUISTA']),
+  filial: z.enum(['palmeira', 'matriz', 'ambas']).default('ambas'),
 });
 
 type CreateUserForm = z.infer<typeof createUserSchema>;
@@ -51,19 +57,11 @@ export default function AdminUsuariosPage() {
 
   const form = useForm<CreateUserForm>({
     resolver: zodResolver(createUserSchema),
-    defaultValues: {
-      name: '',
-      email: '',
-      password: '',
-      role: 'ESTOQUISTA',
-    },
+    defaultValues: { name: '', email: '', password: '', role: 'ESTOQUISTA', filial: 'ambas' },
   });
 
-  // Proteger pagina - SEMPRE requer PIN admin
   useEffect(() => {
-    if (!isAdminMode) {
-      router.push('/funcoes');
-    }
+    if (!isAdminMode) router.push('/funcoes');
   }, [isAdminMode, router]);
 
   useEffect(() => {
@@ -87,22 +85,29 @@ export default function AdminUsuariosPage() {
       await updateUserRole(uid, role);
       toast.success('Papel atualizado');
       await loadData();
-    } catch (err) {
+    } catch {
       toast.error('Erro ao atualizar papel');
     }
   }
 
-  async function handleDelete(uid: string, name: string) {
-    if (!confirm(`Tem certeza que deseja excluir ${name}? Esta acao remove apenas do Firestore.`)) {
-      return;
+  async function handleFilialChange(uid: string, value: string) {
+    try {
+      await updateUserFilial(uid, value === 'ambas' ? null : value);
+      toast.success('Filial atualizada');
+      await loadData();
+    } catch {
+      toast.error('Erro ao atualizar filial');
     }
+  }
 
+  async function handleDelete(uid: string, name: string) {
+    if (!confirm(`Tem certeza que deseja excluir ${name}? Esta acao remove apenas do Firestore.`)) return;
     setDeleting(uid);
     try {
       await deleteUser(uid);
       toast.success(`Usuario ${name} excluido`);
       await loadData();
-    } catch (err) {
+    } catch {
       toast.error('Erro ao excluir usuario');
     } finally {
       setDeleting(null);
@@ -111,30 +116,19 @@ export default function AdminUsuariosPage() {
 
   async function handleCreateUser(data: CreateUserForm) {
     if (!currentUser) return;
-
     setCreating(true);
     try {
       const auth = getAuth();
-      const currentEmail = currentUser.email;
-
-      // Criar usuario no Firebase Auth
       const credential = await createUserWithEmailAndPassword(auth, data.email, data.password);
-
-      // Criar registro no Firestore
       await createUser(credential.user.uid, {
         name: data.name,
         email: data.email,
         role: data.role,
+        filial: data.filial === 'ambas' ? undefined : data.filial,
       });
-
-      // Mostrar credenciais criadas
       setCreatedCredentials({ email: data.email, password: data.password });
       toast.success('Usuario criado com sucesso!');
-
-      // Recarregar lista
       await loadData();
-
-      // Limpar formulario
       form.reset();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Erro ao criar usuario';
@@ -150,8 +144,7 @@ export default function AdminUsuariosPage() {
 
   function handleCopyCredentials() {
     if (!createdCredentials) return;
-    const text = `Email: ${createdCredentials.email}\nSenha: ${createdCredentials.password}`;
-    navigator.clipboard.writeText(text);
+    navigator.clipboard.writeText(`Email: ${createdCredentials.email}\nSenha: ${createdCredentials.password}`);
     setCopied(true);
     toast.success('Credenciais copiadas!');
     setTimeout(() => setCopied(false), 2000);
@@ -168,9 +161,7 @@ export default function AdminUsuariosPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Usuarios</h1>
-          <p className="text-sm text-muted-foreground">
-            Gerencie os usuarios e seus papeis
-          </p>
+          <p className="text-sm text-muted-foreground">Gerencie os usuarios e seus papeis</p>
         </div>
         <Button onClick={() => setShowCreate(true)}>
           <Plus className="mr-2 h-4 w-4" />
@@ -220,10 +211,7 @@ export default function AdminUsuariosPage() {
           ) : (
             <div className="space-y-2">
               {users.map((u) => (
-                <div
-                  key={u.uid}
-                  className="flex items-center gap-4 rounded-lg border p-4"
-                >
+                <div key={u.uid} className="flex items-center gap-4 rounded-lg border p-4">
                   <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-sm font-bold">
                     {u.name.charAt(0).toUpperCase()}
                   </div>
@@ -235,6 +223,12 @@ export default function AdminUsuariosPage() {
                       ) : (
                         <User className="h-4 w-4 text-muted-foreground" />
                       )}
+                      {u.filial && (
+                        <Badge variant="secondary" className="text-xs gap-1">
+                          <Building2 className="h-3 w-3" />
+                          {FILIAL_LABELS[u.filial] || u.filial}
+                        </Badge>
+                      )}
                     </div>
                     <p className="text-xs text-muted-foreground">
                       {u.email} &middot; Nível {calculateLevel(u.xpTotal || 0)}
@@ -245,6 +239,19 @@ export default function AdminUsuariosPage() {
                     <Zap className="mr-1 h-3 w-3" />
                     {(u.xpTotal || 0).toLocaleString('pt-BR')} XP
                   </Badge>
+                  <Select
+                    value={u.filial || 'ambas'}
+                    onValueChange={(v) => handleFilialChange(u.uid, v)}
+                  >
+                    <SelectTrigger className="w-[120px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ambas">Ambas</SelectItem>
+                      <SelectItem value="palmeira">Palmeira</SelectItem>
+                      <SelectItem value="matriz">Matriz</SelectItem>
+                    </SelectContent>
+                  </Select>
                   <Select
                     value={u.role}
                     onValueChange={(v) => handleRoleChange(u.uid, v as UserRole)}
@@ -303,26 +310,14 @@ export default function AdminUsuariosPage() {
                 </div>
               </div>
               <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  className="flex-1"
-                  onClick={handleCopyCredentials}
-                >
+                <Button variant="outline" className="flex-1" onClick={handleCopyCredentials}>
                   {copied ? (
-                    <>
-                      <Check className="mr-2 h-4 w-4" />
-                      Copiado!
-                    </>
+                    <><Check className="mr-2 h-4 w-4" />Copiado!</>
                   ) : (
-                    <>
-                      <Copy className="mr-2 h-4 w-4" />
-                      Copiar
-                    </>
+                    <><Copy className="mr-2 h-4 w-4" />Copiar</>
                   )}
                 </Button>
-                <Button className="flex-1" onClick={handleCloseDialog}>
-                  Fechar
-                </Button>
+                <Button className="flex-1" onClick={handleCloseDialog}>Fechar</Button>
               </div>
             </div>
           ) : (
@@ -334,7 +329,6 @@ export default function AdminUsuariosPage() {
                   <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>
                 )}
               </div>
-
               <div className="space-y-2">
                 <Label>Email</Label>
                 <Input type="email" placeholder="email@exemplo.com" {...form.register('email')} />
@@ -342,7 +336,6 @@ export default function AdminUsuariosPage() {
                   <p className="text-xs text-destructive">{form.formState.errors.email.message}</p>
                 )}
               </div>
-
               <div className="space-y-2">
                 <Label>Senha</Label>
                 <Input type="password" placeholder="Minimo 6 caracteres" {...form.register('password')} />
@@ -350,38 +343,46 @@ export default function AdminUsuariosPage() {
                   <p className="text-xs text-destructive">{form.formState.errors.password.message}</p>
                 )}
               </div>
-
-              <div className="space-y-2">
-                <Label>Papel</Label>
-                <Select
-                  value={form.watch('role')}
-                  onValueChange={(v) => form.setValue('role', v as 'ADMIN' | 'ESTOQUISTA')}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ESTOQUISTA">Estoquista</SelectItem>
-                    <SelectItem value="ADMIN">Administrador</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label>Papel</Label>
+                  <Select
+                    value={form.watch('role')}
+                    onValueChange={(v) => form.setValue('role', v as 'ADMIN' | 'ESTOQUISTA')}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ESTOQUISTA">Estoquista</SelectItem>
+                      <SelectItem value="ADMIN">Administrador</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Filial</Label>
+                  <Select
+                    value={form.watch('filial')}
+                    onValueChange={(v) => form.setValue('filial', v as 'palmeira' | 'matriz' | 'ambas')}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ambas">Ambas</SelectItem>
+                      <SelectItem value="palmeira">Palmeira</SelectItem>
+                      <SelectItem value="matriz">Matriz</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-
               <div className="flex gap-2 pt-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="flex-1"
-                  onClick={handleCloseDialog}
-                >
+                <Button type="button" variant="outline" className="flex-1" onClick={handleCloseDialog}>
                   Cancelar
                 </Button>
                 <Button type="submit" className="flex-1" disabled={creating}>
                   {creating ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Criando...
-                    </>
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Criando...</>
                   ) : (
                     'Criar Usuario'
                   )}

@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { getActiveOperators, seedDefaultOperators } from '@/services/firestore/operators';
+import { getActiveOperators } from '@/services/firestore/operators';
 import { useOperator } from '@/hooks/useOperator';
+import { useFilial } from '@/hooks/useFilial';
 import { useSound } from '@/hooks/useSound';
 import type { Operator } from '@/types';
 import {
@@ -34,6 +35,7 @@ export function OperatorSelectDialog({
 }: OperatorSelectDialogProps) {
   const router = useRouter();
   const { setOperator, setAdminMode } = useOperator();
+  const { filialScope } = useFilial();
   const { playSound } = useSound();
   const [operators, setOperators] = useState<Operator[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,11 +55,11 @@ export function OperatorSelectDialog({
   async function loadOperators() {
     setLoading(true);
     try {
-      // Seed operadores padrão se não existirem
-      await seedDefaultOperators();
-
       const data = await getActiveOperators();
-      setOperators(data);
+      const filtered = filialScope
+        ? data.filter((op) => op.filial === filialScope)
+        : data;
+      setOperators(filtered);
     } catch (err) {
       console.error('Erro ao carregar operadores:', err);
     } finally {

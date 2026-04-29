@@ -83,7 +83,7 @@ export function Header() {
             </div>
             <div>
               <h2 className="text-lg font-semibold">
-                {user?.name || 'Estoquista'}
+                Logisticca
               </h2>
               <p className="text-sm text-muted-foreground">
                 {user?.role === 'ADMIN' ? 'Administrador' : 'Estoquista'}

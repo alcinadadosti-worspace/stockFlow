@@ -34,7 +34,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await signIn(data.email, data.password);
-      router.push('/dashboard');
+      router.push('/selecionar-filial');
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Erro ao fazer login';
       if (message.includes('invalid-credential') || message.includes('wrong-password') || message.includes('user-not-found')) {
@@ -52,7 +52,7 @@ export default function LoginPage() {
     try {
       await signUp(data.email, data.password, data.name);
       toast.success('Conta criada com sucesso!');
-      router.push('/dashboard');
+      router.push('/selecionar-filial');
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Erro ao criar conta';
       if (message.includes('email-already-in-use')) {

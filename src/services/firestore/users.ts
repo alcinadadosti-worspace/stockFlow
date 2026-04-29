@@ -4,6 +4,7 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
+  deleteField,
   collection,
   getDocs,
   query,
@@ -16,7 +17,7 @@ import type { AppUser, UserRole } from '@/types';
 
 const COLLECTION = 'users';
 
-export async function createUser(uid: string, data: { name: string; email: string; role?: UserRole }): Promise<void> {
+export async function createUser(uid: string, data: { name: string; email: string; role?: UserRole; filial?: string }): Promise<void> {
   await setDoc(doc(getFirebaseDb(), COLLECTION, uid), {
     name: data.name,
     email: data.email,
@@ -25,7 +26,16 @@ export async function createUser(uid: string, data: { name: string; email: strin
     xpTotal: 0,
     streak: 0,
     lastActivityDate: null,
+    ...(data.filial ? { filial: data.filial } : {}),
   });
+}
+
+export async function updateUserFilial(uid: string, filial: string | null): Promise<void> {
+  if (filial) {
+    await updateDoc(doc(getFirebaseDb(), COLLECTION, uid), { filial });
+  } else {
+    await updateDoc(doc(getFirebaseDb(), COLLECTION, uid), { filial: deleteField() });
+  }
 }
 
 export async function getUser(uid: string): Promise<AppUser | null> {

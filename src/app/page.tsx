@@ -3,20 +3,23 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { useFilial } from '@/hooks/useFilial';
 
 export default function Home() {
   const { user, loading } = useAuth();
+  const { hasScope, isReady } = useFilial();
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading) {
-      if (user) {
-        router.replace('/dashboard');
-      } else {
-        router.replace('/login');
-      }
+    if (loading || !isReady) return;
+    if (!user) {
+      router.replace('/login');
+    } else if (!hasScope) {
+      router.replace('/selecionar-filial');
+    } else {
+      router.replace('/dashboard');
     }
-  }, [user, loading, router]);
+  }, [user, loading, hasScope, isReady, router]);
 
   return (
     <div className="flex h-screen items-center justify-center">

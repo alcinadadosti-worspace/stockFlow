@@ -9,6 +9,7 @@ import { getAllUsers } from '@/services/firestore/users';
 import { getAllTaskLogs } from '@/services/firestore/taskLogs';
 import { getAllLots } from '@/services/firestore/lots';
 import { useAuth } from '@/hooks/useAuth';
+import { useFilial } from '@/hooks/useFilial';
 import { calculateLevel } from '@/lib/utils';
 import type { AppUser, TaskLog, Lot, AdminLeaderboardEntry } from '@/types';
 import { cn } from '@/lib/utils';
@@ -17,6 +18,7 @@ import { AdminLeaderboardRow } from '@/components/leaderboard/admin-leaderboard-
 
 export default function LeaderboardPage() {
   const { user } = useAuth();
+  const { filialScope } = useFilial();
   const isAdmin = user?.role === 'ADMIN';
   const [entries, setEntries] = useState<AdminLeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -25,7 +27,7 @@ export default function LeaderboardPage() {
 
   useEffect(() => {
     loadData();
-  }, [period]);
+  }, [period, filialScope]);
 
   async function loadData() {
     setLoading(true);
@@ -62,7 +64,11 @@ export default function LeaderboardPage() {
         return ts >= startMs && ts <= endMs && l.status === 'DONE';
       });
 
-      const leaderboard: AdminLeaderboardEntry[] = users.map((u) => {
+      const visibleUsers = filialScope
+        ? users.filter((u) => u.filial === filialScope)
+        : users;
+
+      const leaderboard: AdminLeaderboardEntry[] = visibleUsers.map((u) => {
         const userLogs = filteredLogs.filter((l) => l.uid === u.uid);
         const userLots = filteredLots.filter((l) => l.createdByUid === u.uid);
         const xpTasks = userLogs.reduce((sum, l) => sum + (l.xp || 0), 0);

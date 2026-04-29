@@ -12,6 +12,7 @@ import {
   deleteOperator,
   seedDefaultOperators,
 } from '@/services/firestore/operators';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useOperator } from '@/hooks/useOperator';
 import type { Operator } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -37,13 +38,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Users, Plus, Pencil, Trash2, Zap } from 'lucide-react';
+import { Users, Plus, Pencil, Trash2, Zap, Building2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { calculateLevel } from '@/lib/utils';
 
 const operatorSchema = z.object({
   code: z.string().regex(/^\d{2}$/, 'Codigo deve ter 2 digitos'),
   name: z.string().min(2, 'Nome deve ter pelo menos 2 caracteres'),
+  filial: z.enum(['palmeira', 'matriz', 'nenhuma']).default('nenhuma'),
 });
 
 type OperatorForm = z.infer<typeof operatorSchema>;
@@ -68,7 +70,7 @@ export default function AdminOperadoresPage() {
 
   const form = useForm<OperatorForm>({
     resolver: zodResolver(operatorSchema),
-    defaultValues: { code: '', name: '' },
+    defaultValues: { code: '', name: '', filial: 'nenhuma' },
   });
 
   const loadData = useCallback(async () => {
@@ -111,24 +113,25 @@ export default function AdminOperadoresPage() {
 
   function openCreate() {
     setEditingOperator(null);
-    form.reset({ code: '', name: '' });
+    form.reset({ code: '', name: '', filial: 'nenhuma' });
     setDialogOpen(true);
   }
 
   function openEdit(op: Operator) {
     setEditingOperator(op);
-    form.reset({ code: op.code, name: op.name });
+    form.reset({ code: op.code, name: op.name, filial: (op.filial as 'palmeira' | 'matriz') || 'nenhuma' });
     setDialogOpen(true);
   }
 
   async function handleSubmit(data: OperatorForm) {
     setSaving(true);
+    const filial = data.filial === 'nenhuma' ? undefined : data.filial;
     try {
       if (editingOperator) {
-        await updateOperator(editingOperator.code, { name: data.name });
+        await updateOperator(editingOperator.code, { name: data.name, filial });
         toast.success('Operador atualizado');
       } else {
-        await createOperator(data.code, data.name);
+        await createOperator(data.code, data.name, filial);
         toast.success('Operador criado');
       }
       setDialogOpen(false);
@@ -244,8 +247,12 @@ export default function AdminOperadoresPage() {
                     <div className="flex items-center gap-2">
                       <span className="font-medium">{op.name}</span>
                       {!op.active && (
-                        <Badge variant="secondary" className="text-xs">
-                          Inativo
+                        <Badge variant="secondary" className="text-xs">Inativo</Badge>
+                      )}
+                      {op.filial && (
+                        <Badge variant="outline" className="text-xs gap-1">
+                          <Building2 className="h-3 w-3" />
+                          {op.filial === 'palmeira' ? 'Palmeira' : 'Matriz'}
                         </Badge>
                       )}
                     </div>
@@ -316,6 +323,22 @@ export default function AdminOperadoresPage() {
                   {form.formState.errors.name.message}
                 </p>
               )}
+            </div>
+            <div className="space-y-2">
+              <Label>Filial</Label>
+              <Select
+                value={form.watch('filial')}
+                onValueChange={(v) => form.setValue('filial', v as 'palmeira' | 'matriz' | 'nenhuma')}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="nenhuma">Nenhuma</SelectItem>
+                  <SelectItem value="palmeira">Palmeira</SelectItem>
+                  <SelectItem value="matriz">Matriz</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <Button type="submit" className="w-full" disabled={saving}>
               {saving ? 'Salvando...' : 'Salvar'}

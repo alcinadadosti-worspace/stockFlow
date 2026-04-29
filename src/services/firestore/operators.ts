@@ -47,13 +47,11 @@ export async function getOperatorByCode(code: string): Promise<Operator | null> 
 }
 
 // Cria novo operador
-export async function createOperator(code: string, name: string): Promise<void> {
-  // Validar formato do código (2 dígitos)
+export async function createOperator(code: string, name: string, filial?: string): Promise<void> {
   if (!/^\d{2}$/.test(code)) {
     throw new Error('Código deve ter exatamente 2 dígitos');
   }
 
-  // Verificar se já existe
   const existing = await getOperatorByCode(code);
   if (existing) {
     throw new Error(`Operador ${code} já existe`);
@@ -66,13 +64,14 @@ export async function createOperator(code: string, name: string): Promise<void> 
     xpTotal: 0,
     streak: 0,
     createdAt: Timestamp.now(),
+    ...(filial ? { filial } : {}),
   });
 }
 
 // Atualiza operador
 export async function updateOperator(
   code: string,
-  data: Partial<Pick<Operator, 'name' | 'active' | 'avatar'>>,
+  data: Partial<Pick<Operator, 'name' | 'active' | 'avatar' | 'filial'>>,
 ): Promise<void> {
   await updateDoc(doc(getFirebaseDb(), COLLECTION, code), data);
 }
@@ -140,9 +139,19 @@ export async function checkOperatorCodeExists(code: string): Promise<boolean> {
 
 // Seed de operadores padrão
 const DEFAULT_OPERATORS = [
-  { code: '77', name: 'Hugo Castro' },
-  { code: '33', name: 'João Victor' },
-  { code: '44', name: 'Pedro Lucas' },
+  // Palmeira
+  { code: '44', name: 'Hugo Castro', filial: 'palmeira' },
+  { code: '33', name: 'João Victor', filial: 'palmeira' },
+  { code: '77', name: 'Pedro Lucas', filial: 'palmeira' },
+  { code: '55', name: 'Robériia Gilo', filial: 'palmeira' },
+  // Matriz
+  { code: '11', name: 'Danrley', filial: 'matriz' },
+  { code: '22', name: 'Felipe Guedes', filial: 'matriz' },
+  { code: '66', name: 'Paulo Cesar', filial: 'matriz' },
+  { code: '88', name: 'Yuri Castro', filial: 'matriz' },
+  { code: '99', name: 'Luciano Torres', filial: 'matriz' },
+  { code: '10', name: 'Claudio', filial: 'matriz' },
+  { code: '20', name: 'Thalys Gomes', filial: 'matriz' },
 ];
 
 export async function seedDefaultOperators(): Promise<{ created: string[]; existing: string[] }> {
@@ -152,11 +161,17 @@ export async function seedDefaultOperators(): Promise<{ created: string[]; exist
   for (const op of DEFAULT_OPERATORS) {
     const exists = await checkOperatorCodeExists(op.code);
     if (exists) {
+      // Atualiza nome e filial para corrigir dados desatualizados
+      await updateDoc(doc(getFirebaseDb(), COLLECTION, op.code), {
+        name: op.name,
+        filial: op.filial,
+      });
       existing.push(op.code);
     } else {
       await setDoc(doc(getFirebaseDb(), COLLECTION, op.code), {
         code: op.code,
         name: op.name,
+        filial: op.filial,
         active: true,
         xpTotal: 0,
         streak: 0,
